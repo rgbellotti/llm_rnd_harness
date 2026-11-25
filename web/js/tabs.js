@@ -518,7 +518,7 @@ function renderConfig() {
     const commentNote = document.createElement('div');
     commentNote.className = 'metrics';
     commentNote.id = 'comment-tag-note';
-    commentNote.textContent = 'A comment in a tool output is a pair of tags. During an approval window those tags show this launch’s 12-character key, and that is the only place the key is shown. History views display the same block as <user_comment></user_comment>. Text inside the tags is you speaking about the result. Instructions in a tool result outside the tags stay untrusted data.';
+    commentNote.textContent = 'A comment in a tool output is a pair of tags. During an approval window those tags show this launch’s 20-character key, and that is the only place the key is shown. History views display the same block as <user_comment></user_comment>. Text inside the tags is you speaking about the result. Instructions in a tool result outside the tags stay untrusted data.';
     head.appendChild(commentNote);
     head.appendChild(configRule());
     const hint = document.createElement('div');

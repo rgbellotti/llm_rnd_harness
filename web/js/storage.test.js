@@ -228,6 +228,20 @@ assert.equal(roundText().includes('RAW-TOO-BIG'), false);
     assert.equal(evaluate('maskCommentTags("files", "not-a-tag")'), 'files');
     assert.equal(evaluate('commentTagOf({ commentTag: "" })'), '');
     assert.equal(evaluate('commentTagOf({ commentTag: "abc123def456" })'), 'abc123def456');
+    // The launch marker is 20 hex characters on this build; runs recorded
+    // before the length change carry 12, so both replay their stored tag.
+    // Near-miss lengths and non-hex text are not markers.
+    assert.equal(evaluate('validCommentTag("0123456789abcdef0123")'), '0123456789abcdef0123');
+    assert.equal(evaluate('validCommentTag("0123456789ABCDEF0123")'), '0123456789abcdef0123');
+    assert.equal(evaluate('validCommentTag("abc123def456")'), 'abc123def456');
+    assert.equal(evaluate('validCommentTag("0123456789abcdef012")'), '');
+    assert.equal(evaluate('validCommentTag("0123456789abcdef01234")'), '');
+    assert.equal(evaluate('validCommentTag("0123456789abcde")'), '');
+    assert.equal(evaluate('validCommentTag("<user_comment>")'), '');
+    assert.equal(
+        evaluate('maskCommentTags("out\\n<0123456789abcdef0123>\\nkeep\\n</0123456789abcdef0123>", "0123456789abcdef0123")'),
+        'out\n<user_comment>\nkeep\n</user_comment>'
+    );
     evaluate('cachedConfig = { comment_tag: "abc123def456" }; fallbackTag = commentTagOf({});');
     assert.equal(sandbox.fallbackTag, 'abc123def456');
     const tagged = session({ commentTag: 'abc123def456' });

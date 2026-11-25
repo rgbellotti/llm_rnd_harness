@@ -180,15 +180,19 @@ fn csp_nonce() -> &'static str {
 /// Per-launch 256-bit key for co-pilot annotations inside tool results.
 /// Independent of [`HARNESS_TOKEN`]: the marker is written into the system
 /// prompt and into text the model reads, so it must not reveal the bearer
-/// token that authenticates the page. The annotation is the first 12 hex
-/// characters. The browser shows those tags as `<user_comment>` everywhere
-/// except the live curation box.
+/// token that authenticates the page. The annotation is the first 20 hex
+/// characters (80 bits: the marker tells the model which span of a tool
+/// result is the person speaking, so content that wants to forge that
+/// voice must not be able to guess it). The browser shows those tags as
+/// `<user_comment>` everywhere except the live curation box. Runs recorded
+/// before the length moved to 20 carry a 12-hex marker; the page still
+/// accepts that length so those transcripts replay.
 pub(crate) static COMMENT_KEY: std::sync::LazyLock<String> = std::sync::LazyLock::new(random_token);
 
-/// The 12-character annotation for this launch. `random_token` is at least
-/// 32 hex characters, so the slice is the first 12.
+/// The 20-character annotation for this launch. `random_token` is at least
+/// 32 hex characters, so the slice is the first 20.
 pub(crate) fn comment_tag() -> &'static str {
-    &COMMENT_KEY[..12]
+    &COMMENT_KEY[..20]
 }
 
 /// Extra host names the harness answers to, comma-separated, from

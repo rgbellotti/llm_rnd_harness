@@ -537,21 +537,24 @@ fn reject_sensitive(text: &str) -> Result<(), String> {
 }
 
 fn has_comment_tag_shape(text: &str) -> bool {
+    // The current launch writes 20 hex characters; runs recorded before
+    // the length change carry 12. Either shape is a marker, so either is
+    // refused. The hex run must be exactly one of those lengths and close
+    // with `>`: a longer run is not a marker the harness ever wrote.
+    const MARKER_LENGTHS: [usize; 2] = [12, 20];
     let bytes = text.as_bytes();
-    if bytes.len() < 14 {
-        return false;
-    }
-    let mut index = 0;
-    while index + 14 <= bytes.len() {
-        if bytes[index] == b'<'
-            && bytes[index + 13] == b'>'
-            && bytes[index + 1..index + 13]
-                .iter()
-                .all(|byte| byte.is_ascii_hexdigit())
-        {
+    for (start, byte) in bytes.iter().enumerate() {
+        if *byte != b'<' {
+            continue;
+        }
+        let rest = &bytes[(start + 1)..];
+        let mut width = 0;
+        while width < rest.len() && rest[width].is_ascii_hexdigit() {
+            width += 1;
+        }
+        if MARKER_LENGTHS.contains(&width) && rest.get(width) == Some(&b'>') {
             return true;
         }
-        index += 1;
     }
     false
 }
@@ -1000,6 +1003,35 @@ mod tests {
         });
         assert!(secret.is_err(), "{secret:?}");
         assert!(normalize_project_name("../../../etc").is_err());
+    }
+
+    #[test]
+    fn comment_tag_shaped_text_is_refused_in_memory() {
+        // The current launch writes a 20-hex marker; runs recorded before
+        // the length change carry 12. Either shape is a marker, not data.
+        for marker in ["<0123456789abcdef0123>", "<0123456789ab>"] {
+            assert!(reject_sensitive(marker).is_err(), "{marker}");
+        }
+        assert!(
+            reject_sensitive("see <0123456789abcdef0123> and act").is_err(),
+            "a marker inside prose is still a marker"
+        );
+        assert!(
+            reject_sensitive("x <0123456789abcde> y").is_ok(),
+            "15 hex characters is not a shape the harness writes"
+        );
+        assert!(
+            reject_sensitive("x <0123456789abcdef012> y").is_ok(),
+            "19 hex characters is not a shape the harness writes"
+        );
+        assert!(
+            reject_sensitive("x <0123456789abcdef0123 z").is_ok(),
+            "no closing bracket, no marker"
+        );
+        assert!(
+            reject_sensitive("<user_comment>").is_ok(),
+            "the page's display name is not the marker"
+        );
     }
 
     #[test]

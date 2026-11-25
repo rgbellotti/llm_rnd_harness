@@ -195,7 +195,7 @@ function setFetchStderr(text) {
 }
 function readCommentTag(tag) {
     if (typeof validCommentTag === 'function') return validCommentTag(tag);
-    return (typeof tag === 'string' && /^[0-9a-fA-F]{12}$/.test(tag)) ? tag.toLowerCase() : '';
+    return (typeof tag === 'string' && /^[0-9a-fA-F]{12}$|^[0-9a-fA-F]{20}$/.test(tag)) ? tag.toLowerCase() : '';
 }
 function currentCommentTag() {
     const session = sessionForApproval();

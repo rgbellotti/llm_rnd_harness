@@ -709,7 +709,7 @@ struct ConfigResponse {
     system_prompt_template: String,
     /// Built-in role from `model_voice`. Restore default sends this text back.
     system_prompt_default: String,
-    /// First 12 hex characters of this launch's comment key. The curation
+    /// First 20 hex characters of this launch's comment key. The curation
     /// box inserts it; displayed transcripts translate it back.
     comment_tag: String,
     /// None = no round cap (chains end when the model stops or the user stops).
@@ -1716,7 +1716,7 @@ mod interaction_tests {
         assert_eq!(json["history_recording"], true);
         assert!(json["history_error"].is_null());
         let tag = json["comment_tag"].as_str().unwrap();
-        assert_eq!(tag.len(), 12, "{tag}");
+        assert_eq!(tag.len(), 20, "{tag}");
         assert!(tag.bytes().all(|byte| byte.is_ascii_hexdigit()), "{tag}");
 
         let response = config_handler(State(test_state("/nonexistent-dir-xyz/harness.db")))

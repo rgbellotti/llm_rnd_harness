@@ -192,7 +192,7 @@ enum StreamEvent {
     /// the browser copy had to leave it out.
     RunStarted {
         run_id: String,
-        /// First 12 hex characters of this launch's comment key. The page
+        /// First 20 hex characters of this launch's comment key. The page
         /// stores it with the tab so a refresh can translate those tags
         /// after the process that minted them is gone. History keeps the
         /// same value on the run row.

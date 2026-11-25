@@ -894,10 +894,12 @@ function renderWebFetchResult(el, show, item, stderr) {
     if (stderr && String(stderr).trim()) panes.push({ label: 'stderr', text: show(stderr) });
     mountToolPanes(el, heading, panes);
 }
-// The launch comment marker is 12 hex characters. Anything else is left
-// untouched so an older transcript keeps the words it was stored with.
+// The launch comment marker is 20 hex characters. Runs recorded before
+// the length change carry a 12-hex marker, so both lengths replay their
+// own stored tag. Anything else is left untouched so a malformed
+// transcript keeps the words it was stored with.
 function validCommentTag(tag) {
-    return typeof tag === 'string' && /^[0-9a-fA-F]{12}$/.test(tag) ? tag.toLowerCase() : '';
+    return typeof tag === 'string' && /^[0-9a-fA-F]{12}$|^[0-9a-fA-F]{20}$/.test(tag) ? tag.toLowerCase() : '';
 }
 function commentTagOf(s) {
     // A session that already recorded its marker, including an empty one

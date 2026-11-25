@@ -6,6 +6,16 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
 
 ## [Unreleased]
 
+### Security
+
+- The per-launch user comment marker is now the first 20 hex characters
+  of the 256-bit comment key (80 bits, up from 48). The marker tells the
+  model which span of a tool result is you speaking; a longer space
+  makes it harder to guess for content that wants to forge that voice.
+  The page still accepts the older 12-hex marker when replaying runs
+  recorded before this change, and the project-memory guard refuses
+  both shapes.
+
 ### Fixed
 
 - Long command lines in `run_cmd` tool-call cards wrap inside the card

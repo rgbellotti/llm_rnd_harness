@@ -309,7 +309,7 @@ mod config_tests {
         let prompt = system_prompt_with_workspace();
         let tag = comment_tag();
         let workspace = workspace_dir_string();
-        assert_eq!(tag.len(), 12, "{tag}");
+        assert_eq!(tag.len(), 20, "{tag}");
         assert!(tag.bytes().all(|byte| byte.is_ascii_hexdigit()), "{tag}");
         assert_eq!(comment_tag(), tag, "the launch marker stays fixed");
         assert_ne!(
