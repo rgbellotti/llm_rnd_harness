@@ -28,10 +28,8 @@ your agent to derive from. More inference provider options will be added soon.
 ## Requirements
 
 - Rust toolchain (`cargo`)
-- A Linux desktop. The harness reads `/proc`, uses `/dev/urandom`, and
-  types its password prompts on a Unix TTY; other platforms are untested
-  and unsupported.
-- To run with zero setup and zero API keys: [Ollama](https://ollama.com)
+- A Linux desktop. 
+- To try with zero setup and zero API keys: [Ollama](https://ollama.com)
   listening locally (default `http://127.0.0.1:11434`) with one chat model
   pulled (`ollama pull <name>` — any chat model). A refresh lists the
   chat models that installation reports. Embedding models stay out of
