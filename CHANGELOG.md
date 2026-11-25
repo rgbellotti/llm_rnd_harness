@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project's versioning is `MAJOR.MINOR` while pre-1.0.
 
+## [Unreleased]
+
+### Fixed
+
+- Long command lines in `run_cmd` tool-call cards wrap inside the card
+  again. The dual pretty/raw shell view is a pair of `pre` blocks, and
+  the browser's own `white-space: pre` for `pre` outranks anything the
+  card passes down by inheritance — so a long command ran past the
+  card's right edge in live sessions and history replay. The wrap
+  contract is now stated on the blocks themselves (`web/style.css`).
+
 ## [0.1.0] — 2026-11-24
 
 First public release.

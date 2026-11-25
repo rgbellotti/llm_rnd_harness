@@ -274,6 +274,13 @@
         .rendered-body pre code { display: block; padding: 0; border-radius: 0; background: transparent; color: inherit; -webkit-box-decoration-break: slice; box-decoration-break: slice; }
         .view-toggle { background: none; border: none; color: var(--h-link, #7ab0d0); cursor: pointer; font-size: 0.75rem; padding: 0.2rem 0; text-decoration: underline; font-family: inherit; }
         .tool { position: relative; white-space: pre-wrap; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border-left: 3px solid var(--h-tool-edge, #4a6a8a); padding: 0.4rem 0.6rem; margin: 0.5rem 0; overflow-wrap: anywhere; word-break: break-word; min-width: 0; max-width: 100%; }
+        /* A run_cmd card's dual shell view (paintShellView) is two pre
+           blocks. The browser's own pre rule (white-space: pre) outranks
+           anything a .tool card can pass down by inheritance, so a long
+           command line would run past the card's right edge instead of
+           wrapping. The wrap contract is restated on the blocks, the same
+           treatment .tool-tab-body gets. */
+        .tool .shell-pretty, .tool .shell-raw { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; overflow-x: hidden; margin: 0.35rem 0 0; min-width: 0; max-width: 100%; background: transparent; border: none; padding: 0; font: inherit; color: inherit; }
         #docsView, #toolsView { margin-top: 0.5rem; }
         .docs-copy { white-space: pre-wrap; color: var(--h-text, #aaaa77); margin: 0.35rem 0 0.7rem; font-family: system-ui, sans-serif; font-size: 0.92rem; line-height: 1.45; }
         .docs-copy code { font-family: ui-monospace, monospace; font-size: 0.92em; color: var(--h-code-fg, #aaaa77); background: var(--h-code-bg, #0a1a28); padding: 0.15em 0.4em; border-radius: 4px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
