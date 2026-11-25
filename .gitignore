@@ -1,0 +1,61 @@
+# Build output at any depth, including nested crates under local scratch.
+target/
+
+# Local tool-run scratch: logs, fetched pages, FBX/GLB, and experiment output.
+/work_directory/
+
+# Resume pointer for a local Grok session. Not harness source.
+/grok_session
+/opencode_deepseek_pro
+
+# History database, SQLite sidecars, and generated RAG indexes.
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+# The committed schema-conformance fixture is an exception: it is the
+# builder's contract with the harness, checked by a cargo test.
+!tools/fixtures/*.rag.db
+*.sqlite-shm
+*.sqlite-wal
+
+# Python caches and virtualenvs.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# uv's local update stamp.
+web_tool/.last_update_check
+
+# Secrets. The live key file is ~/.config/harness-keys, outside this tree.
+# These names stop a copy, an env file, or a key from being committed later.
+.env
+.env.*
+!.env.example
+harness-keys
+*.age
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+id_ecdsa
+id_ecdsa.*
+*.key
+
+# Tool logs and local junk.
+*.log
+/tmp/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Local test material for the manual Test tab (PDFs, datasets). Local
+# fixtures, not repo content: 7 MB of binaries the operator supplies.
+/resource/

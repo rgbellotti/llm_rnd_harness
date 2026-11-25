@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Per-launch bearer token: the server refuses every request that
+         does not carry it (see src/auth.rs). Rendered into the page at
+         serve time; never written to storage. -->
+    <meta name="harness-token" content="{TOKEN}">
+    <!-- Inlined at serve time so the jump arrows need no extra route. -->
+    <meta name="scroll-arrow" content="{SCROLL_ARROW}">
+    <title>LLM R&D Harness</title>
+    <style>
+/*__APP_CSS__*/
+    </style>
+    <script nonce="{CSP_NONCE}">
+    try {
+        var raw = localStorage.getItem('harness.highlight.colors');
+        var root = document.documentElement;
+        if (raw) {
+            var colors = JSON.parse(raw);
+            for (var k in colors) {
+                if (!/^[a-z0-9-]+$/.test(k)) continue;
+                var v = colors[k];
+                if (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v)) root.style.setProperty('--h-' + k, v);
+            }
+        } else if (localStorage.getItem('harness.highlight') === 'blue-gold') {
+            // An explicit light choice: the stylesheet's own defaults are
+            // the light palette, so nothing needs painting.
+        } else {
+            // Dark mode is the harness's resting look: a browser that
+            // never chose a theme opens on it.
+            root.setAttribute('data-highlight', 'dark');
+        }
+    } catch (e) {}
+    </script>
+</head>
+<body>
+    <div id="runLane"><p id="runLaneNote"><svg id="deltaIcon" class="delta-icon" viewBox="-0.19 6.48 100.38 100.38" aria-hidden="true"><g class="wheel-spin"><g class="y-axis-spin"><polygon points="50,10.48 90,79.76 10,79.76" fill="#22caa7" fill-opacity="0.35" stroke="#22caa7" stroke-width="8" stroke-linejoin="round"/></g></g></svg><span id="runLaneText">Thinking...</span></p></div>
+    <div id="controlDashboard">
+    <div class="model-row">
+        <p class="model-line">Model: <button id="modelToggle" class="model-toggle" type="button" aria-haspopup="true" aria-expanded="false" title="Switch model (available while no run is in flight)">{MODEL}</button> · Streams per-round deltas + thinking outputs</p>
+        <!--<div style="font-size: 0.7rem; margin-top: 0.2rem; margin-bottom: 0.2rem;">Tip: use the first line as the title of your prompt / tab / session.</div> -->
+        <br>
+        <div id="modelMenu" class="model-menu" role="menu" aria-label="Switch model" hidden data-groups='{MODEL_GROUPS}'></div>
+    </div>
+    <div id="top_row_buttons" class="row-between">
+        <button id="historyBtn" class="tab-btn" type="button" title="Recorded past sessions from the local database (read-only recall)">history</button>
+        <button id="configBtn" class="tab-btn" type="button" title="Role, workspace sentence, and switches">⚙ config</button>
+        <button id="docsBtn" class="tab-btn" type="button" title="How the harness is used">docs</button>
+        <button id="toolsBtn" class="tab-btn" type="button" title="Tool registrations and switches">tools</button>
+        <button id="workBtn" class="tab-btn" type="button" title="The workspace directory: click a name to copy its path, or drag to select several names as text">work</button>
+        <button id="memoryBtn" class="tab-btn" type="button" title="Project memory: names, goals, and notes">memory</button>
+        <button id="decisionBtn" class="tab-btn" type="button" title="Decision queries: bool, rating, and choice against a separate model (transient, not recorded)">decision</button>
+        <button id="creditsBtn" class="tab-btn" type="button" title="Links to the official pages where credits are added for the models this harness runs">credits</button>
+    </div>
+    <details class="menu">
+        <summary>⋯ session options</summary>
+        <div class="menu-row">
+            <label><input type="checkbox" id="storeToggle" checked> remember tabs (browser storage)</label>
+            <button id="clearStoreBtn" type="button">clear saved</button>
+        </div>
+        <div class="menu-row">
+            <div class="export-menu" id="sessionExportMenu">
+                <button id="exportMenuBtn" class="export-toggle" type="button" aria-haspopup="true" aria-expanded="false" title="Download this tab as text, HTML, or JSON">Export</button>
+                <div class="export-pop" hidden>
+                    <button id="exportTxtBtn" type="button" title="This tab as context blocks">Text</button>
+                    <button id="exportHtmlBtn" type="button" title="Full archive, including tool outputs">HTML</button>
+                    <button id="dlTabBtn" type="button" title="This tab, without tool outputs">JSON</button>
+                    <button id="exportAllBtn" type="button" title="Every open tab, without tool outputs">All JSON</button>
+                </div>
+            </div>
+            <button id="curateSessionBtn" type="button" title="Append this tab's text into the prompt. Each block keeps its context label.">Curate</button>
+            <button id="continueSessionBtn" type="button" title="Clears the current tabs (with confirm when unexported work would be lost) and opens the assembled context in a fresh session">Continue in new session</button>
+            <div class="export-menu" id="compactContinueMenu">
+                <button id="compactContinueBtn" class="export-toggle" type="button" aria-haspopup="true" aria-expanded="false" title="Continue as a compacted session. Headers keep HID. Chosen bodies become [ctx compacted].">Compact continue</button>
+                <div class="export-pop" hidden>
+                    <button id="compactResultsBtn" type="button" title="Compact tool results only. Headers keep HID.">Tool results</button>
+                    <button id="compactCallsBtn" type="button" title="Compact tool results and tool calls.">Results and calls</button>
+                    <button id="compactCapturesBtn" type="button" title="Compact results, calls, and before-review captures.">Results, calls, and previews</button>
+                    <button id="compactBulkyBtn" type="button" title="Also compact thinking. Responses and the prompt stay full.">Also thinking</button>
+                </div>
+            </div>
+            <button id="continueTabBtn" type="button" title="Keeps every existing tab and opens the assembled context in a new one">Continue in new tab</button>
+        </div>
+        <div class="menu-row">
+            <label for="effortSelect">Grok reasoning effort</label>
+            <select id="effortSelect" title="How long Grok thinks before each reply, including before a tool call. low is a short trace. high is the API default and a longer visible trace. xhigh is the longest. grok-4.5 treats xhigh as high. Models reached through Ollama ignore this. Applies to the next run. A Grok approval can change it for the rest of that run.">
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high" selected>high</option>
+                <option value="xhigh">xhigh</option>
+            </select>
+            <span id="grokKeyNote" class="menu-hint"></span>
+            <span id="effortError" class="model-menu-error" style="display:none"></span>
+        </div>
+        <div class="menu-hint">Grok reasoning effort applies to the next Grok run. Ollama ignores it. Every level still shows a reasoning trace before a tool call. The level changes how long that trace is, how long the round waits, and how many reasoning tokens are billed on top of the visible reply. On a Grok run, the approval dialog can set a different level for the next round, and that choice stays selected on later calls in the same run.</div>
+        <div class="menu-hint">JSON is the small archive (prompt + thinking + responses + metrics — tool outputs excluded). HTML is the full-fidelity archive (everything, viewable offline). Curate appends that text into the prompt, with a context label on each block.</div>
+    </details>
+    <div id="bottom_row_buttons" class="row-between">
+    <div id="bottom_row_left" class="row-start">
+        <button id="stopBtn" type="button" style="display: none;" title="Abort the running chain">Stop</button>
+    </div>
+    <div id="tabbar"></div>
+    <div id="bottom_row_right" class="row-end">
+        <button id="promptEditBtn" class="tab-btn" type="button" title="Expand or collapse the prompt box.">prompt edit</button>
+        <button id="newTabBtn" type="button">New tab</button>
+        <span class="row-divider" aria-hidden="true"></span>
+        <button id="newSessionBtn" title="Clear all tabs and start a blank session">New Session</button>
+    </div>
+    </div>
+    </div>
+    <div id="pruneNote"></div>
+    <div id="promptDock">
+    <div id="promptFrame">
+    <textarea id="prompt" spellcheck="true" placeholder="TIP: use this first line as the Title for your session tab. \n Actual prompt on next line..."></textarea>
+    </div>
+    <div id="promptClipStrip" style="display: none;">
+        <button id="clipPromptBtn" class="toggle-link" type="button" title="Toggle between the 8-line clip and the full prompt box">show full prompt</button>
+    </div>
+    <div id="promptMeta">
+    <div id="vimLaneToggle" class="vim-lane-toggle">
+        <label>
+            <input id="vimLaneBox" type="checkbox"> vim keys
+        </label>
+        <span class="vim-tip" tabindex="0" aria-describedby="vimTipBody">(?)<span id="vimTipBody" class="vim-tip-body" role="tooltip">
+            <span class="vim-tip-title">Vim keys</span>
+            <span>Counts work: 3w, 2dd, 12G</span>
+            <span>h j k l — left, down, up, right</span>
+            <span>w b e — word; W B E — WORD; ge — end of previous word</span>
+            <span>0 ^ $ — line start, first non-blank, line end</span>
+            <span>gg G — top, or end; 12G is line 12</span>
+            <span>f t F T ; , — find a character on the line</span>
+            <span>% { } — matching bracket, paragraphs</span>
+            <span>/ ? n N * # — search. A lowercase pattern ignores case</span>
+            <span>v V — select characters or lines. Copy and paste stay the browser keys</span>
+            <span>d c y — operators. diw, ci", da( and the other i/a objects</span>
+            <span>dd cc yy D C x X s — line and character edits</span>
+            <span>p P — paste the last yank or delete</span>
+            <span>u — undo a vim edit. Ctrl-r in normal mode redoes</span>
+            <span>Ctrl-d Ctrl-u — half a page. . repeats the last change</span>
+            <span>i a I A o O — insert. r ~ J &gt;&gt; &lt;&lt; — replace, case, join, indent</span>
+            <span>jj or Esc — normal mode. A click starts in insert mode</span>
+        </span></span>
+    </div>
+    <div id="promptTools" class="editor-bar" style="display: none;">
+        <span id="editorCount"></span>
+        <button id="savePromptBtn" type="button" title="Save the prompt box text into the downloads folder">Save</button>
+        <button id="compactPromptBtn" type="button" title="Replace the selection with [ctx compacted]. No selection compacts the block at the cursor and leaves its header. Selecting [ctx compacted] recalls that HID.">Compact</button>
+        <button id="clearPromptBtn" type="button" title="Save the prompt for Restore, then empty the box.">Clear</button>
+        <button id="restorePromptBtn" type="button" title="Put the saved prompt back into the box.">Restore</button>
+    </div>
+    <div id="composerActions" class="row-end">
+        <button id="runBtn">Generate</button>
+        <button id="uploadBtn" type="button" title="Insert file contents into the prompt">Upload files</button>
+    </div>
+    </div>
+    <details class="protocol" id="protocolBox" style="display: none;">
+        <summary>How to structure selected context</summary>
+        <p>This harness uses a context curation approach, where it's important to delineate the information. Use these structure tags to edit a session history, and then resend it as the next prompt to the model using Generate.</p>
+        <pre>==== PROMPT ====
+(original prompt text)
+==== THINKING (round 1) ====
+(model reasoning)
+==== RESPONSE (round 1) ====
+(model answer text)
+==== TOOL CALL run_cmd (round 1) ====
+(arguments)
+==== TOOL RESULT (round 1) HID: 243 ====
+(command output)
+==== TOOL RESULT (round 1) HID: 243 ====
+[ctx compacted]
+---- Uploaded File 'notes.txt' ----
+(file contents)
+---- EOF 'notes.txt' ----</pre>
+        <p>Curate a round, a response, or a session appends that text here with the same labels.</p>
+        <ul>
+            <li><b>Save</b> saves prompt to a file.</li>
+            <li><b>Compact</b> replaces the selection with <code>[ctx compacted]</code>. The header keeps <code>HID</code>, the history row id. Selecting the marker recalls that row. Copy stays a browser key.</li>
+            <li><b>Clear</b> clears the prompt.</li>
+            <li><b>Restore</b> restores the last autosave (or Clear).</li>
+        </ul>
+        <p>Token/time metrics available in JSON/HTML exports, but not added to assembled context. Per-call timing embedded in tool results is kept.</p>
+    </details>
+    </div>
+    <input id="fileInput" type="file" multiple style="display: none;">
+    <div id="historyBanner" class="history-banner" style="display: none;"></div>
+    <label id="unrecordedLabel" class="unrecorded-label" style="display: none;"><input type="checkbox" id="allowUnrecorded"> Allow an unrecorded run</label>
+    <div id="status" role="status" aria-live="polite"></div>
+    <div id="output"></div>
+    <div id="configView" style="display: none;"></div>
+    <div id="docsView" style="display: none;"></div>
+    <div id="toolsView" style="display: none;"></div>
+    <div id="workView" style="display: none;"></div>
+    <div id="memoryView" style="display: none;"></div>
+    <div id="decisionView" style="display: none;"></div>
+    <div id="creditsView" style="display: none;">
+        <h2 class="pane-title">Inference Providers</h2>
+        <a class="provider-link" href="https://ollama.com/dashboard" target="_blank" rel="noopener noreferrer">Ollama <span class="provider-url">https://ollama.com/dashboard</span></a>
+        <a class="provider-link" href="https://console.x.ai/team/default/billing" target="_blank" rel="noopener noreferrer">xAI <span class="provider-url">https://console.x.ai/team/default/billing</span></a>
+        <a class="provider-link" href="https://platform.reflection.ai/billing" target="_blank" rel="noopener noreferrer">Reflection <span class="provider-url">https://platform.reflection.ai/billing</span></a>
+    </div>
+    <div id="historyView" style="display: none;"></div>
+    <div id="clearOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="clearTitle">
+            <h2 id="clearTitle">Start a new session?</h2>
+            <p class="hint">Are you sure you want to clear the session? The session data hasn't been exported yet — all tabs and their prompt/response history will be discarded.</p>
+            <div class="modal-actions">
+                <button id="clearConfirm" class="btn-accept" type="button">Yes, clear it</button>
+                <button id="clearCancel" class="btn-redirect" type="button">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <div id="contextOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal" id="contextDialog" role="dialog" aria-modal="true" aria-labelledby="contextTitle">
+            <h2 id="contextTitle">Context limit</h2>
+            <p class="hint">The provider did not report a context size. Enter the token count to use as a guide for this run. The model is told that this number came from you.</p>
+            <input id="contextLimitInput" inputmode="numeric" autocomplete="off" aria-label="Context token limit" placeholder="32768">
+            <p id="contextLimitError" class="modal-error"></p>
+            <div class="modal-actions">
+                <button id="contextUse" class="btn-accept" type="button">Use this limit</button>
+                <button id="contextSkip" class="btn-redirect" type="button">Start without a budget line</button>
+                <button id="contextCancel" class="btn-redirect" type="button">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <div id="approvalOverlay" class="modal-overlay" style="display: none;">
+        <div class="modal" id="approvalDialog" role="dialog" aria-modal="true" aria-labelledby="approvalTitle">
+            <h2 id="approvalTitle">Tool approval required</h2>
+            <div id="approvalContextTabs" class="sub-tabs" role="tablist">
+                <button id="approvalActionTab" class="sub-tab sub-tab-active" type="button" role="tab" aria-selected="true">Action</button>
+                <button id="approvalThinkingTab" class="sub-tab" type="button" role="tab" aria-selected="false">Thinking</button>
+                <button id="approvalStderrTab" class="sub-tab" type="button" role="tab" aria-selected="false" style="display:none">stderr</button>
+            </div>
+            <div id="approvalActionPane">
+                <p id="approvalCloud" class="cloud-label" style="display: none;"></p>
+                <p id="approvalHint" class="hint">Review the tool call before accepting or sending alternate instructions.</p>
+                <pre id="approvalCmd"></pre>
+                <button id="relayCopyBtn" class="copy-btn" type="button" style="display: none;">copy command</button>
+                <div id="approvalImageWrap" style="display: none;">
+                    <p id="approvalImageMeta" class="hint"></p>
+                    <div id="approvalImageBox">
+                        <img id="approvalImage" alt="Image under review">
+                        <div id="approvalImageOverlay"></div>
+                    </div>
+                    <p id="approvalImageHint" class="hint">Drag on the image to select a focus region. Highlight describes the region to the model with the full image attached; Send region attaches only the selected pixels.</p>
+                    <div id="regionModeRow" style="display: none;">
+                        <button id="regionModeHighlight" class="region-mode region-mode-on" type="button">highlight</button>
+                        <button id="regionModeCrop" class="region-mode" type="button">send only this region</button>
+                        <button id="clearRegionBtn" class="toggle-link" type="button">clear region</button>
+                    </div>
+                </div>
+                <button id="approvalWideBtn" class="view-toggle" type="button" style="display: none;">wide view</button>
+                <p id="approvalFileDiffNote" class="hint" style="display: none;"></p>
+                <div id="approvalFileDiff" class="tool-diff" style="display: none;"></div>
+                <div id="approvalProvenance" class="provenance" style="display: none;"></div>
+                <div id="questionFields" class="question-fields" style="display: none;"></div>
+                <div id="fetchReviewTabs" class="sub-tabs" style="display: none;" role="tablist">
+                    <button id="fetchTextTab" class="sub-tab sub-tab-active" type="button" role="tab" aria-selected="true">Extracted text</button>
+                    <button id="fetchRawTab" class="sub-tab" type="button" role="tab" aria-selected="false">Original HTML</button>
+                </div>
+                <div id="approvalTextTools" style="display:none">
+                    <button id="addCommentBtn" type="button">add comment</button>
+                    <button id="approvalTextTop" type="button" title="Jump to the start of the output">top</button>
+                    <button id="approvalTextBottom" type="button" title="Jump to the end of the output">bottom</button>
+                    <button id="approvalTextAll" type="button" title="Select all of the output text">select all</button>
+                </div>
+                <textarea id="approvalText" spellcheck="false" style="display: none;" placeholder="Type alternate instructions to send back instead of running the command…"></textarea>
+                <textarea id="approvalCommandEdit" spellcheck="false" style="display: none;" aria-label="Alternate shell command" placeholder="Shell command to run"></textarea>
+                <p id="approvalCommandDiffNote" class="hint" style="display: none;"></p>
+                <div id="approvalCommandDiff" class="tool-diff" style="display: none;"></div>
+                <p id="approvalCommandNoteHint" class="hint" style="display: none;">Optional note for the model. It is not passed to the shell.</p>
+                <textarea id="approvalCommandNote" spellcheck="false" style="display: none;" aria-label="Note for the model" placeholder="Why this command was adjusted…"></textarea>
+                <div id="rawBodyWrap" style="display: none;">
+                    <p id="rawBodyLabel" class="hint">HTTP response body, capped at 256 KiB. Read-only. Stored with the FETCH ORIGINAL preview. This tab is not submitted to the model.</p>
+                    <pre id="rawBodyBox"></pre>
+                </div>
+            </div>
+            <div id="approvalThinkingPane" style="display: none;">
+                <p id="approvalThinkingNote" class="hint">Thinking that led to this tool call.</p>
+                <pre id="approvalThinking"></pre>
+            </div>
+            <div id="approvalStderrPane" style="display: none;">
+                <p id="approvalStderrNote" class="hint">Browser notes from this fetch. Diagnostic only. This tab is not submitted to the model.</p>
+                <pre id="approvalStderr"></pre>
+            </div>
+            <p id="approvalCloudFoot" class="cloud-label" style="display: none;"></p>
+            <div id="approvalTimeoutRow" class="menu-row" style="display: none;">
+                <label for="approvalTimeout">Command time limit</label>
+                <select id="approvalTimeout" title="Time limit for this command. None is the usual limit. Later commands keep whatever limit the model requests unless you change them here.">
+                    <option value="none">none</option>
+                    <option value="30s">30s</option>
+                    <option value="20m">20 minutes</option>
+                </select>
+            </div>
+            <p id="approvalTimeoutHint" class="menu-hint" style="display: none;">Applies to this command only. None is the usual limit: the command runs until it finishes, Stop run, or the page closes. 30 seconds and 20 minutes stop it at that mark.</p>
+            <div id="approvalEffortRow" class="menu-row" style="display: none;">
+                <label for="approvalEffort">Next round reasoning</label>
+                <select id="approvalEffort" title="Reasoning effort for the next Grok round. The choice stays selected on later calls in this run.">
+                    <option value="low">low</option>
+                    <option value="medium">medium</option>
+                    <option value="high">high</option>
+                    <option value="xhigh">xhigh</option>
+                </select>
+            </div>
+            <p id="approvalEffortHint" class="menu-hint" style="display: none;">Used for the next Grok round. Stays selected on later calls in this run.</p>
+            <div class="modal-actions">
+                <button id="approvalAccept" class="btn-accept" type="button">Accept &amp; run</button>
+                <button id="approvalAlternate" class="btn-redirect" type="button" style="display: none;" title="Edit this shell command and run your version. A note can tell the model why. The note is not passed to the shell.">Edit Command</button>
+                <button id="approvalRedirect" class="btn-redirect" type="button" title="Do not run this call. Tell the model what to do instead.">Alternate Tool Call</button>
+                <button id="approvalBack" class="toggle-link" type="button" style="display: none;">← back to accept</button>
+                <button id="webSubmit" class="btn-accept" type="button" style="display: none;">Submit results</button>
+                <button id="questionSubmit" class="btn-accept" type="button" style="display: none;">Send answers</button>
+                <button id="approvalStop" class="btn-stop" type="button" title="Abort the whole run; nothing further executes">Stop run</button>
+            </div>
+            <div id="approvalError" class="modal-error"></div>
+        </div>
+    </div>
+    <div id="vimMode" style="display: none;" role="status" aria-live="polite"></div>
+    <script nonce="{CSP_NONCE}">
+/*__APP_JS__*/
+    </script>
+</body>
+</html>

@@ -1,0 +1,1030 @@
+        /* Theme colors. Blue and gold is the fallback. Dark mode and saved
+           presets set the same variables on the page. */
+        :root {
+            --h-page: #223344; --h-text: #aaaa77; --h-surface: #112233; --h-inset: #0a1a28;
+            --h-button: #051117; --h-button-text: #acac79; --h-border: #334455;
+            --h-heading: #aaaa78; --h-title: #caca8a; --h-active: #caca8a;
+            --h-muted: #8899aa; --h-think-border: #8899aa; --h-link: #7ab0d0;
+            --h-code-bg: #0a1a28; --h-code-fg: #aaaa77; --h-th-bg: #0a1a28; --h-td-bg: #0d1c2a;
+            --h-dock: #162433;
+            --h-tok-comment: #8292a2; --h-tok-punct: #a0b0c0; --h-tok-keyword: #e6db74;
+            --h-tok-tag: #f92672; --h-tok-property: #f92672; --h-tok-param: #aaaa77;
+            --h-tok-constant: #f92672; --h-tok-number: #ae81ff; --h-tok-string: #a6e22e;
+            --h-tok-char: #a6e22e; --h-tok-attr: #e6db74; --h-tok-function: #66d9ef;
+            --h-tok-operator: #f8f8f2; --h-tok-url: #f8f8f2; --h-tok-regex: #fd971f;
+            --h-metrics: #7a9a7a; --h-hint: #8a9ab0; --h-tab: #8a9ab0; --h-status: #888888;
+            --h-error: #e08080; --h-warning: #e0c080; --h-warning-bg: #2a2214; --h-warning-border: #6a5a30;
+            --h-accent: #22caa7; --h-accent-hover: #4ae8c0;
+            --h-menu: #0d1c2a; --h-menu-hover: #16283a; --h-menu-label: #77879a; --h-disabled: #4a5a68;
+            --h-option: #acac79; --h-option-hover: #caca8a; --h-cloud: #7d8b99; --h-faint: #5a6a78;
+            --h-prune: #b0a080; --h-preview: #999977; --h-preview-bg: #0d1c2a;
+            --h-tool-edge: #4a6a8a; --h-tool-result: #6a8a4a; --h-stop: #8a4a4a; --h-stop-text: #e0a0a0;
+            --h-focus: #4a6a8a; --h-prov-bg: #2e2410; --h-prov-edge: #d0a030; --h-prov-text: #e8c878;
+            --h-diff-del: #7a303c; --h-diff-add: #1e5c3a; --h-condense: #1a2740;
+            --h-comment-bg: #e0c080; --h-comment-text: #aaaa77;
+            --h-task-text: #aaaa77; --h-task-line: #2a3e50;
+            /* Activity triangle. One speed for each mode. */
+            --y-spin-speed: 2.5s;     /* Thinking: spin on the vertical center axis */
+            --wheel-spin-speed: 6s;   /* Waiting: clockwise roll around the centroid */
+        }
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            background-color: var(--h-page, #223344);
+            color: var(--h-text, #aaaa77);
+        }
+        /* The control cluster stays on screen while history and output scroll.
+           The prompt editor sits under it and can scroll away. */
+        #controlDashboard {
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            background: var(--h-page, #223344);
+            margin: 0 -1rem;
+            padding: 0.15rem 1rem 0.45rem 1rem;
+            border-bottom: 1px solid var(--h-border, #334455);
+        }
+        #controlDashboard #bottom_row_buttons { flex-wrap: wrap; align-items: center; row-gap: 0.35rem; }
+        #controlDashboard #bottom_row_left,
+        #controlDashboard #bottom_row_right { flex: 0 0 auto; }
+        #controlDashboard #tabbar { flex: 1 1 12rem; margin-top: 0; min-width: 8rem; }
+        /* Bullet for the Thinking / Waiting line. The viewBox is the
+           triangle's circumcircle, so the wheel stays centered. The box is
+           sized so the triangle itself is about 1.5 capital letters of
+           this line. Lifecycle stays in icon.js. */
+        #deltaIcon {
+            flex: 0 0 auto;
+            display: block;
+            height: 1.55em;
+            width: 1.55em;
+            height: calc(1.5cap * 100.38 / 69.28);
+            width: calc(1.5cap * 100.38 / 69.28);
+            pointer-events: none;
+            overflow: visible;
+            opacity: 1; transition: opacity 1.1s ease, visibility 0s 1.1s;
+        }
+        #deltaIcon.icon-hidden { opacity: 0; visibility: hidden; }
+        /* Model selector: the model-name link opens the dropdown; visible on
+           demand only, no standing chrome. */
+        .model-row { position: relative; }
+        .model-line { margin: 0.35rem 0 0; }
+        .model-toggle { background: none; border: none; padding: 0; margin: 0; font: inherit; color: var(--h-accent, #22caa7); cursor: pointer; /* text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; */ font-family: ui-monospace, monospace; font-size: 0.87rem; }
+        .model-toggle:hover { color: var(--h-accent-hover, #4ae8c0); }
+        .model-toggle:disabled { color: var(--h-accent, #22caa7); cursor: wait; }
+        .model-menu { position: absolute; z-index: 40; top: 100%; left: 0; margin-top: 0.25rem; background: var(--h-menu, #0d1c2a); border: 1px solid var(--h-border, #334455); border-radius: 6px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); padding: 0.4rem; min-width: 240px; max-width: 340px; max-height: 60vh; overflow-y: auto; font-size: 0.8rem; }
+        .model-menu[hidden] { display: none; }
+        .menu-group-label { display: block; color: var(--h-menu-label, #77879a); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.3rem 0.4rem 0.15rem; }
+        .model-option { display: block; width: 100%; text-align: left; background: none; border: none; border-radius: 999px; color: var(--h-option, #acac79); font-family: ui-monospace, monospace; font-size: 0.78rem; padding: 0.28rem 0.4rem; margin: 0; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .model-option:hover:not(:disabled) { background: var(--h-menu-hover, #16283a); color: var(--h-option-hover, #caca8a); }
+        .model-option.active { color: var(--h-accent, #22caa7); }
+        .model-option:disabled { color: var(--h-disabled, #4a5a68); cursor: not-allowed; }
+        .model-option .model-mark { display: inline-block; width: 1.1em; color: var(--h-accent, #22caa7); }
+        .model-menu-hint { color: var(--h-menu-label, #77879a); font-size: 0.72rem; font-style: italic; padding: 0.35rem 0.4rem; }
+        .model-menu-error { color: var(--h-error, #e08080); font-size: 0.72rem; padding: 0.35rem 0.4rem; white-space: pre-wrap; }
+        .model-default-link { display: block; color: var(--h-accent, #22caa7); font-family: ui-monospace, monospace; font-size: 0.72rem; text-decoration: underline; cursor: pointer; padding: 0.05rem 0.4rem 0.05rem 1.6em; }
+        .model-default-link:hover { color: var(--h-accent-hover, #4ae8c0); }
+        /* Thinking spins on the vertical axis through the centroid.
+           Waiting rolls clockwise around that same point. One motion
+           at a time. Speeds are --y-spin-speed and --wheel-spin-speed. */
+        #deltaIcon .wheel-spin,
+        #deltaIcon .y-axis-spin {
+            transform-box: view-box;
+            transform-origin: 50px 56.67px;
+        }
+        #deltaIcon.wheel .wheel-spin {
+            animation: delta-roll-right var(--wheel-spin-speed) linear infinite;
+        }
+        #deltaIcon.flip .y-axis-spin {
+            animation: delta-spin-y var(--y-spin-speed) ease-in-out infinite;
+        }
+        @keyframes delta-roll-right {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @keyframes delta-spin-y {
+            0% { transform: perspective(300px) rotateY(0deg); }
+            50% { transform: perspective(300px) rotateY(180deg); }
+            100% { transform: perspective(300px) rotateY(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #deltaIcon.wheel .wheel-spin,
+            #deltaIcon.flip .y-axis-spin { animation: none; }
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            font-size: 1rem;
+            background-color: var(--h-surface, #112233);
+            color: var(--h-text, #aaaa77);
+            /* One line above the first row. The vim mode label sits in
+               that band, inside the box. #prompt and .modal textarea set
+               their own padding and keep the same top line. */
+            padding-top: calc(0.5rem + 1.4em);
+        }
+        button {
+            margin-top: 0.5rem; margin-right: 0.3rem; 
+            padding: 0.5rem 1.2rem; 
+            font-size: 1rem; cursor: pointer;
+            appearance: none;
+            background-color: var(--h-button, #051117);
+            color: var(--h-button-text, #acac79);
+            /* Capsules. Generate and New Session stay boxed, below. */
+            border: 1px solid var(--h-border, #334455);
+            border-radius: 999px;
+        }
+        #runBtn,
+        #newSessionBtn {
+            border: 2px solid var(--h-border, #334455);
+            border-radius: 4px;
+        }
+        /* Generate is the only "go" control on the page: its own class,
+           its own theme fields, a mild green the Config color editor can
+           retune per preset. The label stays a fixed light tone so the
+           green reads as go on every palette. */
+        #runBtn {
+            background-color: var(--h-generate, #2f7a4d);
+            color: #f2f6f0;
+            font-weight: 600;
+        }
+        #runBtn:hover:not(:disabled) { background-color: var(--h-generate-hover, #3d9a63); }
+        button:disabled { opacity: 0.5; cursor: wait; }
+        #status {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--h-status, #888888);
+            font-style: italic;
+            min-height: 1.2em;
+        }
+        /* One large title opens every pane, wrapped or not, so tab-to-tab
+           clicks keep the first line vertically stationary. The wrapped
+           views (below) spend less top padding so the title inside the
+           box lands level with the title of an unwrapped pane. */
+        .pane-title {
+            margin: 0 0 0.45rem 0;
+            font-size: 1.35rem;
+            font-weight: 600;
+            line-height: 1.2;
+            font-family: system-ui, sans-serif;
+            color: var(--h-title, #caca8a);
+        }
+        #configView, #memoryView, #decisionView, #creditsView { margin-top: 0.5rem; }
+        /* The credits list: the whole "name · url" line is one anchor; the
+           name is plain text and the url sits beside it, slightly muted. */
+        .provider-link { display: block; margin: 0.5rem 0; font-family: system-ui, sans-serif; font-size: 1rem; color: var(--h-text, #aaaa77); text-decoration: none; }
+        .provider-link:hover, .provider-link:hover .provider-url { color: var(--h-link, #7ab0d0); }
+        .provider-url { color: var(--h-hint, #8a9ab0); font-size: 0.85em; }
+        #output, #historyView, #workView {
+            margin-top: 0.5rem;
+            background-color: var(--h-surface, #112233);
+            padding: 0.45rem 1rem 1rem;
+            border-radius: 6px;
+            min-height: 200px;
+            font-family: ui-monospace, monospace;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            /* A newly shown pane should stay where it was laid out. Anchoring
+               was sticking long Diagnostics panes to their last line. */
+            overflow-anchor: none;
+        }
+        /* A session that is still being written has no rounds yet. Keep
+           the area under the controls blank until Generate prints some. */
+        #output:not(:has(.round, .error, .done, .metrics, .scroll-spacer)) {
+            background: none;
+            min-height: 0;
+            padding: 0;
+            margin-top: 0;
+        }
+        .vim-lane-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            flex: 0 0 auto;
+            margin: 0;
+            font-family: system-ui, sans-serif;
+            font-size: 0.8rem;
+            color: var(--h-hint, #8a9ab0);
+        }
+        /* The (?) is the only hover target, so the checkbox stays easy to hit.
+           Each command is its own line; add a span when a key is added. */
+        .vim-tip {
+            position: relative;
+            cursor: help;
+            color: var(--h-link, #7ab0d0);
+            user-select: none;
+            padding: 0 0.15rem;
+            margin-top: 0;
+        }
+        .vim-tip:focus-visible { outline: 1px solid var(--h-link, #7ab0d0); outline-offset: 2px; }
+        .vim-tip-body {
+            display: none;
+            position: absolute;
+            z-index: 80;
+            bottom: calc(100% + 0.35rem);
+            left: 0;
+            width: max-content;
+            max-width: 22rem;
+            max-height: min(24rem, 60vh);
+            overflow-y: auto;
+            padding: 0.5rem 0.65rem;
+            background: var(--h-surface, #112233);
+            color: var(--h-task-text, #aaaa77);
+            border: 1px solid var(--h-border, #334455);
+            border-radius: 4px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            font-family: system-ui, sans-serif;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            text-align: left;
+            white-space: normal;
+        }
+        .vim-tip:hover .vim-tip-body,
+        .vim-tip:focus-visible .vim-tip-body,
+        .vim-tip:focus-within .vim-tip-body { display: block; }
+        .vim-tip-body span { display: block; }
+        .vim-tip-body span + span { margin-top: 0.12rem; }
+        .vim-tip-title { color: var(--h-title, #caca8a); margin-bottom: 0.15rem; }
+        .round { border-top: 2px solid var(--h-border, #334455); margin-top: 1rem; padding-top: 0.5rem; }
+        .round:first-child { border-top: none; margin-top: 0; }
+        .round h3 { margin: 0 0 0.5rem 0; font-size: 0.95rem; color: var(--h-heading, #aaaa78); }
+        .thinking { position: relative; margin: 0.5rem 0; border: 1px solid var(--h-think-border, #8899aa); border-radius: 4px; padding: 0.4rem 0.6rem; }
+        .thinking-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.35rem 0.65rem; }
+        .thinking-label { color: var(--h-muted, #8899aa); font-size: 0.8rem; }
+        .thinking-body { white-space: pre-wrap; color: var(--h-muted, #8899aa); margin-top: 0.4rem; }
+        .thinking-body:empty { display: none; margin: 0; }
+        .content { white-space: pre-wrap; color: var(--h-heading, #aaaa78); }
+        /* Model-rendered HTML inherits the theme so the model emits bare tags. */
+        .rendered-body { margin: 0.4rem 0; color: var(--h-heading, #aaaa78); }
+        .rendered-body .math-display { margin: .75rem 0; text-align: center; overflow-x: auto; }
+        .rendered-body .math-inline { white-space: nowrap; }
+        .rendered-body ul, .rendered-body ol { margin: 0.4rem 0 0.4rem 1.4rem; padding: 0; }
+        .rendered-body li { margin: 0.15rem 0; }
+        .rendered-body table { color: var(--h-text, #aaaa77); border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.85rem; }
+        .rendered-body th, .rendered-body td { border: 1px solid var(--h-border, #334455); padding: 0.35rem 0.6rem; text-align: left; vertical-align: top; }
+        .rendered-body th { background: var(--h-th-bg, #0a1a28); color: var(--h-title, #caca8a); }
+        .rendered-body td { background: var(--h-td-bg, #0d1c2a); }
+        .rendered-body a { color: var(--h-link, #7ab0d0); }
+        .rendered-body code, .rendered-body pre { color: var(--h-code-fg, #aaaa77); background: var(--h-code-bg, #0a1a28); }
+        /* Inline chips use the 4px corner of buttons and fields. Blocks use
+           the 6px corner of the output panel. The code inside a block is the
+           text layer: no second chip, so the block's rounding stays visible. */
+        .rendered-body pre { padding: 0.7rem 0.9rem; border-radius: 6px; overflow-x: auto; }
+        .rendered-body code { padding: 0.15em 0.4em; border-radius: 4px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+        .rendered-body pre code { display: block; padding: 0; border-radius: 0; background: transparent; color: inherit; -webkit-box-decoration-break: slice; box-decoration-break: slice; }
+        .view-toggle { background: none; border: none; color: var(--h-link, #7ab0d0); cursor: pointer; font-size: 0.75rem; padding: 0.2rem 0; text-decoration: underline; font-family: inherit; }
+        .tool { position: relative; white-space: pre-wrap; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border-left: 3px solid var(--h-tool-edge, #4a6a8a); padding: 0.4rem 0.6rem; margin: 0.5rem 0; overflow-wrap: anywhere; word-break: break-word; min-width: 0; max-width: 100%; }
+        #docsView, #toolsView { margin-top: 0.5rem; }
+        .docs-copy { white-space: pre-wrap; color: var(--h-text, #aaaa77); margin: 0.35rem 0 0.7rem; font-family: system-ui, sans-serif; font-size: 0.92rem; line-height: 1.45; }
+        .docs-copy code { font-family: ui-monospace, monospace; font-size: 0.92em; color: var(--h-code-fg, #aaaa77); background: var(--h-code-bg, #0a1a28); padding: 0.15em 0.4em; border-radius: 4px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+        .tool-menu { border-collapse: collapse; border: 0; margin: 0.35rem 0 0.6rem; }
+        .tool-menu td { border: 0; padding: 0.12rem 0.9rem 0.12rem 0; vertical-align: middle; }
+        .tool-menu label, .tool-approvals label { display: flex; align-items: center; gap: 0.35rem; font-family: system-ui, sans-serif; font-size: 0.85rem; color: var(--h-text, #aaaa77); margin: 0; white-space: nowrap; }
+        .tool-menu label.tool-toggle-off, .tool-approvals label.tool-toggle-off { opacity: 0.45; }
+        .tool-policy { font-family: system-ui, sans-serif; font-size: 0.8rem; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.1rem 0.3rem; }
+        .tool-policy:disabled { cursor: not-allowed; }
+        .tool-approvals { display: flex; flex-wrap: wrap; gap: 0.35rem 0.85rem; }
+        .config-rule {
+            border: 0;
+            border-top: 1px solid var(--h-border, #334455);
+            height: 0;
+            /* The left edge meets the first letter of a checkbox label:
+               the 1rem box, its 0.4rem margin, and the space before the word. */
+            margin: 1.2rem 0 1.2rem 1.62rem;
+        }
+        .config-check { display: block; }
+        .role-head { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.4rem; }
+        .role-head .metrics { margin-top: 0; }
+        .role-head .copy-btn { margin-left: auto; }
+        .role-view { cursor: pointer; }
+        .role-view:hover, .role-view:focus-visible { box-shadow: inset 0 0 0 1px var(--h-link, #7ab0d0); }
+        textarea.role-edit { height: auto; min-height: 10rem; margin-top: 0.35rem; }
+        .workspace-path { width: min(100%, 36rem); margin: 0.2rem 0 0.2rem 1.4rem; font-family: ui-monospace, monospace; font-size: 0.8rem; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.2rem 0.4rem; }
+        #configView .tool, #toolsView .tool { line-height: 1.4; }
+        #configView .tool.tool-condensed,
+        #toolsView .tool.tool-condensed {
+            max-height: calc(13 * 1.4em);
+            overflow: hidden;
+            overflow: clip;
+            position: relative;
+            border: 1px solid var(--h-border, #334455);
+            border-radius: 6px;
+            isolation: isolate;
+            contain: paint;
+        }
+        #configView .tool.tool-condensed .round-expand-hit,
+        #toolsView .tool.tool-condensed .round-expand-hit {
+            display: block;
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            border-radius: 5px;
+            background: transparent;
+            cursor: pointer;
+        }
+        #configView .tool.tool-condensed .round-expand-hit:hover,
+        #configView .tool.tool-condensed .round-expand-hit:focus-visible,
+        #toolsView .tool.tool-condensed .round-expand-hit:hover,
+        #toolsView .tool.tool-condensed .round-expand-hit:focus-visible {
+            box-shadow: inset 0 0 0 1px var(--h-link, #7ab0d0);
+        }
+        #configView .tool.tool-condensed::after,
+        #toolsView .tool.tool-condensed::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            margin: 0;
+            border-radius: 5px;
+            clip-path: inset(0 round 5px);
+            pointer-events: none;
+            z-index: 1;
+            background: rgba(26, 39, 64, 0.5);
+            background: color-mix(in srgb, var(--h-condense, #1a2740) 52%, transparent);
+        }
+        .tool-result { border-left-color: var(--h-tool-result, #6a8a4a); }
+        .tool-tabs { margin: 0.35rem 0 0; max-width: 100%; min-width: 0; }
+        .tool .sub-tab { white-space: normal; }
+        .tool-tab-body { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; overflow-x: hidden; margin: 0.35rem 0 0; min-width: 0; max-width: 100%; background: transparent; border: none; padding: 0; font: inherit; color: inherit; }
+        .metrics { font-size: 0.78rem; color: var(--h-metrics, #7a9a7a); margin-top: 0.4rem; }
+        .error { position: relative; color: var(--h-error, #e08080); white-space: pre-wrap; margin: 0.5rem 0; }
+        .history-banner { color: var(--h-warning, #e0c080); background: var(--h-warning-bg, #2a2214); border: 1px solid var(--h-warning-border, #6a5a30); border-radius: 6px; padding: 0.55rem 0.75rem; margin: 0.6rem 0; white-space: pre-wrap; }
+        .cloud-label { color: var(--h-cloud, #7d8b99); background: none; border: none; padding: 0; margin: 0.1rem 0 0.35rem; font-family: system-ui, sans-serif; font-size: 0.75rem; line-height: 1.35; flex-shrink: 0; overflow-wrap: anywhere; max-width: 100%; min-width: 0; }
+        .tool-sub { display: block; font-family: system-ui, sans-serif; font-size: 0.75rem; color: var(--h-hint, #8a9ab0); margin-top: 0.15rem; max-width: 16rem; }
+        #approvalCloudFoot { margin: 0.55rem 0 0; }
+        #approvalEffortRow, #approvalTimeoutRow { flex-shrink: 0; margin: 0.45rem 0 0; }
+        #approvalEffortRow label, #approvalTimeoutRow label { font-family: system-ui, sans-serif; font-size: 0.8rem; color: var(--h-hint, #8a9ab0); }
+        #approvalEffortHint, #approvalTimeoutHint { flex-shrink: 0; margin: 0.15rem 0 0; }
+        .unrecorded-label { display: block; margin: 0.4rem 0 0.6rem; color: var(--h-warning, #e0c080); font-family: system-ui, sans-serif; font-size: 0.9rem; }
+        .done { margin-top: 1rem; padding-top: 0.5rem; border-top: 2px solid var(--h-border, #334455); color: var(--h-title, #caca8a); }
+        .scroll-spacer { overflow: hidden; }
+        .scroll-spacer-top { display: flex; flex-direction: column; justify-content: flex-end; }
+        .scroll-spacer-bottom { display: flex; flex-direction: column; justify-content: flex-start; }
+        .scroll-spacer-note { display: none; color: var(--h-hint, #8a9ab0); font-family: system-ui, sans-serif; font-size: 0.8rem; padding: 0.4rem 0; }
+        .round-body { overflow-anchor: none; }
+        #historyView .round-body { position: relative; }
+        #configView .tool, #toolsView .tool { position: relative; }
+        .scroll-jump-anchor {
+            position: absolute;
+            left: 0;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        .scroll-jump-anchor-start { top: 0; scroll-margin-top: 0.5rem; }
+        .scroll-jump-anchor-end { bottom: 0; scroll-margin-bottom: 0.5rem; }
+        .scroll-jump {
+            position: absolute;
+            left: 50%;
+            z-index: 4;
+            display: block;
+            width: 56px;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            transform: translateX(-50%);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s linear;
+            line-height: 0;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .scroll-jump.is-near { opacity: 1; pointer-events: auto; }
+        .scroll-jump[hidden] { display: none !important; }
+        .scroll-jump img {
+            display: block;
+            width: 56px;
+            height: auto;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        .scroll-jump-down img { transform: scaleY(-1); }
+        .round-preview { white-space: pre-wrap; color: var(--h-preview, #999977); background: var(--h-preview-bg, #0d1c2a); border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.4rem 0.6rem; margin: 0.5rem 0; }
+        .toggle-link { background: none; border: none; color: var(--h-link, #7ab0d0); cursor: pointer; font-size: 0.8rem; padding: 0.3rem 0; text-decoration: underline; font-family: inherit; }
+        .round-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.65rem; position: relative; z-index: 2; }
+        .round-head h3 { flex: 0 1 auto; }
+        .round-tools { display: none; flex: 1 1 14rem; flex-wrap: wrap; align-items: center; min-width: 0; font-size: 0.68rem; line-height: 1.35; color: var(--h-hint, #8a9ab0); font-family: ui-monospace, monospace; }
+        .round-tools.round-tools-on { display: flex; }
+        .round-tool-count { position: relative; }
+        .round-tool-count + .round-tool-count { border-left: 1px solid var(--h-border, #334455); margin-left: 0.45rem; padding-left: 0.45rem; }
+        .round-tool-count.has-tasks { cursor: help; }
+        .round-tool-count.has-tasks:hover .round-tool-name,
+        .round-tool-count.has-tasks:focus-visible .round-tool-name { color: var(--h-link, #7ab0d0); }
+        .round-tool-count.has-tasks:focus-visible { outline: 1px solid var(--h-link, #7ab0d0); outline-offset: 2px; }
+        .round-tool-tasks {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 5;
+            min-width: 12rem;
+            max-width: 22rem;
+            max-height: 14rem;
+            overflow-y: auto;
+            padding: 0.4rem 0.55rem;
+            background: var(--h-surface, #112233);
+            color: var(--h-task-text, #aaaa77);
+            border: 1px solid var(--h-border, #334455);
+            border-radius: 4px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            font-family: system-ui, sans-serif;
+            font-size: 0.75rem;
+            line-height: 1.35;
+            white-space: normal;
+        }
+        .round-tool-count:hover .round-tool-tasks,
+        .round-tool-count:focus-within .round-tool-tasks { display: block; }
+        .round-tool-tasks span { display: block; }
+        .round-tool-tasks span + span {
+            margin-top: 0.28rem;
+            padding-top: 0.28rem;
+            border-top: 1px solid var(--h-task-line, #2a3e50);
+        }
+        .round-head-condense { flex: 1 1 14rem; min-width: 0; text-align: left; padding: 0.2rem 0; }
+        .round-expand-hit { display: none; }
+        /* The work pane's directory tree. Plain text on purpose: a drag
+           across lines selects several names for the prompt, and a single
+           click (no selection) copies that one path. */
+        #workTree { margin: 0.35rem 0 0; padding: 0.45rem 0.55rem; border: 1px solid var(--h-border, #334455); border-radius: 4px; background: var(--h-inset, #0a1a28); max-height: 62vh; overflow: auto; flex-shrink: 0; }
+        .work-entry { cursor: pointer; }
+        .work-entry:hover { background: rgba(122, 176, 208, 0.16); }
+        .work-dir { color: var(--h-link, #7ab0d0); }
+        .work-cap { color: var(--h-hint, #8a9ab0); }
+        #workNote { margin: 0.35rem 0 0; flex-shrink: 0; }
+        .work-root { color: var(--h-link, #7ab0d0); cursor: pointer; overflow-wrap: anywhere; }
+        .work-root:hover { text-decoration: underline; }
+        .work-head-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.65rem; }
+        /* History condensation keeps the rendered round and clips it.
+           The veil is painted inside the border and clipped to the same
+           curve, so it cannot sit above the top edge or square off the corners. */
+        #historyView .round-body.round-condensed,
+        .diagnostics-pane .round-body.round-condensed,
+        .diagnostics-pane .thinking.diag-condensed,
+        .diagnostics-pane .tool.tool-condensed,
+        .diagnostics-pane .error.diag-condensed {
+            max-height: calc(16 * 1.4em);
+            overflow: hidden;
+            overflow: clip;
+            position: relative;
+            border: 1px solid var(--h-border, #334455);
+            border-radius: 6px;
+            isolation: isolate;
+            contain: paint;
+        }
+        #historyView .round-body.round-condensed > :first-child,
+        .diagnostics-pane .round-body.round-condensed > :first-child,
+        .diagnostics-pane .thinking.diag-condensed > :first-child,
+        .diagnostics-pane .tool.tool-condensed > :first-child,
+        .diagnostics-pane .error.diag-condensed > :first-child {
+            margin-top: 0;
+        }
+        #historyView .round-body.round-condensed .round-expand-hit,
+        .diagnostics-pane .round-body.round-condensed .round-expand-hit,
+        .diagnostics-pane .thinking.diag-condensed .round-expand-hit,
+        .diagnostics-pane .tool.tool-condensed .round-expand-hit,
+        .diagnostics-pane .error.diag-condensed .round-expand-hit {
+            display: block;
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            border-radius: 5px;
+            background: transparent;
+            cursor: pointer;
+        }
+        #historyView .round-body.round-condensed .round-expand-hit:hover,
+        #historyView .round-body.round-condensed .round-expand-hit:focus-visible,
+        .diagnostics-pane .round-body.round-condensed .round-expand-hit:hover,
+        .diagnostics-pane .round-body.round-condensed .round-expand-hit:focus-visible,
+        .diagnostics-pane .thinking.diag-condensed .round-expand-hit:hover,
+        .diagnostics-pane .thinking.diag-condensed .round-expand-hit:focus-visible,
+        .diagnostics-pane .tool.tool-condensed .round-expand-hit:hover,
+        .diagnostics-pane .tool.tool-condensed .round-expand-hit:focus-visible,
+        .diagnostics-pane .error.diag-condensed .round-expand-hit:hover,
+        .diagnostics-pane .error.diag-condensed .round-expand-hit:focus-visible {
+            box-shadow: inset 0 0 0 1px var(--h-link, #7ab0d0);
+        }
+        #historyView .round-body.round-condensed::after,
+        .diagnostics-pane .round-body.round-condensed::after,
+        .diagnostics-pane .thinking.diag-condensed::after,
+        .diagnostics-pane .tool.tool-condensed::after,
+        .diagnostics-pane .error.diag-condensed::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            margin: 0;
+            border-radius: 5px;
+            clip-path: inset(0 round 5px);
+            pointer-events: none;
+            z-index: 1;
+            background: rgba(26, 39, 64, 0.5);
+            background: color-mix(in srgb, var(--h-condense, #1a2740) 52%, transparent);
+        }
+        .diff-line { display: block; white-space: pre-wrap; }
+        .diff-del { background: var(--h-diff-del, #7a303c); }
+        .diff-add { background: var(--h-diff-add, #1e5c3a); }
+        /* A line that also marks the edited words keeps a quiet tint on the
+           words that stayed. The edited words use the theme color at full
+           strength. A line with no inner mark is entirely new or removed,
+           so it stays at full strength. */
+        .diff-del:has(.diff-inline) {
+            background: color-mix(in srgb, var(--h-diff-del, #7a303c) 34%, transparent);
+        }
+        .diff-add:has(.diff-inline) {
+            background: color-mix(in srgb, var(--h-diff-add, #1e5c3a) 34%, transparent);
+        }
+        .diff-inline {
+            border-radius: 2px;
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+        }
+        .diff-del .diff-inline { background: var(--h-diff-del, #7a303c); }
+        .diff-add .diff-inline { background: var(--h-diff-add, #1e5c3a); }
+        .diff-skip {
+            display: block;
+            white-space: pre-wrap;
+            color: var(--h-hint, #8a9ab0);
+            font-style: italic;
+        }
+        #approvalCommandDiff, #approvalFileDiff {
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            background: var(--h-inset, #0a1a28);
+            border-left: 3px solid var(--h-tool-edge, #4a6a8a);
+            padding: 0.45rem 0.7rem;
+            margin: 0.35rem 0;
+            font-size: 0.85rem;
+            overflow-x: hidden;
+            overflow-y: auto;
+            max-height: 24vh;
+            flex-shrink: 0;
+            overscroll-behavior: contain;
+        }
+        .user-comment {
+            background: rgba(224, 192, 128, 0.38);
+            background: color-mix(in srgb, var(--h-comment-bg, #e0c080) 42%, transparent);
+            color: var(--h-comment-text, inherit);
+            border-radius: 2px;
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+        }
+        #creditsView a { color: var(--h-link, #7ab0d0); display: block; margin: 0.55rem 0; }
+        .copy-btn { background: var(--h-button, #051117); border: 1px solid var(--h-border, #334455); color: var(--h-button-text, #acac79); font-size: 0.75rem; padding: 0.2rem 0.6rem; margin: 0 0 0 auto; border-radius: 999px; cursor: pointer; font-family: inherit; }
+        .copy-btn:hover { border-color: var(--h-link, #7ab0d0); color: var(--h-link, #7ab0d0); }
+        .round-actions { margin-left: auto; display: inline-flex; gap: 0.35rem; align-items: center; }
+        .round-actions .copy-btn { margin: 0; white-space: pre-line; text-align: center; line-height: 1.15; padding: 0.28rem 0.5rem; }
+        .export-menu { position: relative; display: inline-block; }
+        .export-pop { position: absolute; z-index: 45; top: calc(100% + 0.15rem); left: 0; min-width: 9.5rem; background: var(--h-menu, #0d1c2a); border: 1px solid var(--h-border, #334455); border-radius: 6px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); padding: 0.3rem; display: flex; flex-direction: column; }
+        .export-pop[hidden] { display: none; }
+        .export-pop button { display: block; width: 100%; text-align: left; background: none; border: none; border-radius: 999px; color: var(--h-option, #acac79); font-family: inherit; font-size: 0.78rem; padding: 0.32rem 0.55rem; margin: 0; cursor: pointer; }
+        .export-pop button:hover { background: var(--h-menu-hover, #16283a); color: var(--h-option-hover, #caca8a); }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(3, 8, 14, 0.72); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
+        .modal { background: var(--h-surface, #112233); border: 1px solid var(--h-focus, #4a6a8a); border-radius: 8px; max-width: 640px; width: 100%; min-width: 0; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; padding: 1.2rem; color: var(--h-text, #aaaa77); font-family: ui-monospace, monospace; box-shadow: 0 12px 48px rgba(0,0,0,0.6); overscroll-behavior: none; }
+        /* The file-write preview uses the screen it needs: wide by
+           default for file diffs, with a compact toggle back. The tool
+           call readout stays a condensed, scrollable strip on top; the
+           highlighted preview takes the rest of the window — and keeps
+           the larger share even when both are small, because the readout
+           never grows past its cap. */
+        #approvalDialog.approval-wide { max-width: min(1280px, 94vw); }
+        #approvalDialog.approval-wide #approvalCmd {
+            flex: 0 1 auto;
+            max-height: 15vh;
+            overflow-y: auto;
+        }
+        #approvalDialog.approval-wide #approvalFileDiff {
+            flex: 1 1 auto;
+            max-height: none;
+            overflow: auto;
+        }
+        /* A new-file preview renders the proposed text as one code block
+           inside the diff box: inherit the box's own inset instead of
+           nesting the modal's generic pre styling. */
+        #approvalFileDiff .file-content {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            border-left: none;
+            overflow: visible;
+        }
+        #approvalFileDiff .file-content code { font-size: inherit; }
+        #approvalImageWrap { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.5rem 0; flex-shrink: 0; }
+        #approvalImageBox { position: relative; display: inline-block; max-width: 100%; align-self: flex-start; }
+        #approvalImage { display: block; max-width: 100%; max-height: 55vh; width: auto; height: auto; border: 1px solid var(--h-border, #334455); border-radius: 4px; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+        #approvalImageOverlay { position: absolute; top: 0; left: 0; pointer-events: none; border: 2px solid #22caa7; background: rgba(34, 202, 167, 0.22); display: none; box-sizing: border-box; }
+        #approvalImageMeta { font-size: 0.8rem; color: var(--h-hint, #8a9ab0); font-family: ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; flex-shrink: 0; }
+        #approvalImageHint { font-size: 0.8rem; color: var(--h-hint, #8a9ab0); font-family: system-ui, sans-serif; margin: 0; flex-shrink: 0; }
+        #regionModeRow { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; margin: 0.25rem 0 0; flex-shrink: 0; }
+        .region-mode { font-family: system-ui, sans-serif; font-size: 0.8rem; padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid var(--h-border, #334455); background: var(--h-inset, #0a1a28); color: var(--h-hint, #8a9ab0); cursor: pointer; }
+        .region-mode-on { background: #22caa7; border-color: #22caa7; color: #062018; font-weight: 700; }
+        #clearRegionBtn { align-self: flex-start; }
+        .modal h2 { margin: 0 0 0.4rem 0; font-size: 1rem; color: var(--h-title, #caca8a); font-family: system-ui, sans-serif; flex-shrink: 0; }
+        .modal p.hint { font-size: 0.8rem; color: var(--h-hint, #8a9ab0); font-family: system-ui, sans-serif; margin: 0.3rem 0 0.6rem 0; flex-shrink: 0; }
+        .modal pre { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border-left: 3px solid var(--h-tool-edge, #4a6a8a); padding: 0.5rem 0.7rem; margin: 0.5rem 0; font-size: 0.85rem; overflow-x: hidden; overflow-y: auto; min-width: 0; max-width: 100%; min-height: 0; flex: 1 1 auto; overscroll-behavior: contain; }
+        .modal textarea { width: 100%; max-width: 100%; min-width: 0; min-height: 70px; max-height: 20vh; overflow-x: hidden; overflow-y: auto; overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; box-sizing: border-box; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border: 1px solid var(--h-border, #334455); border-radius: 4px; font-family: ui-monospace, monospace; font-size: 0.85rem; padding: calc(0.5rem + 1.4em) 0.5rem 0.5rem; flex-shrink: 0; overscroll-behavior: contain; }
+        .modal-actions { display: flex; gap: 0.6rem; margin-top: 0.7rem; flex-wrap: wrap; flex-shrink: 0; }
+        .modal-actions button { margin: 0; }
+        .btn-accept { border: 1px solid var(--h-tool-result, #6a8a4a); }
+        .btn-redirect { border: 1px solid var(--h-tool-edge, #4a6a8a); }
+        .btn-stop { border: 1px solid var(--h-stop, #8a4a4a); color: var(--h-stop-text, #e0a0a0); }
+        /* Sub-tabs inside a finished chain: response in front, the rest one
+           click away. Same visual language as the top-level tab bar. */
+        .sub-tabs { display: flex; gap: 0.35rem; margin: 0.6rem 0 0; border-bottom: 2px solid var(--h-border, #334455); }
+        .sub-tab { background: var(--h-inset, #0a1a28); border: 1px solid var(--h-border, #334455); color: var(--h-tab, #8a9ab0); font-size: 0.78rem; padding: 0.28rem 1rem; border-radius: 999px; cursor: pointer; margin: 0 0 0.3rem 0; font-family: inherit; }
+        .sub-tab:hover { color: var(--h-title, #caca8a); }
+        .sub-tab.sub-tab-active { background: var(--h-surface, #112233); color: var(--h-active, #caca8a); border-color: var(--h-focus, #4a6a8a); }
+        .sub-pane { padding-top: 0.4rem; overflow-anchor: none; }
+        .response-pane .round { margin-top: 0.3rem; }
+        .response-answer .round-body { font-size: 0.92rem; }
+        #stopBtn { border: 1px solid var(--h-stop, #8a4a4a); color: var(--h-stop-text, #e0a0a0); }
+        /* Config view: tool selection checkboxes (the one interactive
+           control; tool JSON stays read-only). */
+        .tool-toggle { width: 1rem; height: 1rem; accent-color: var(--h-accent, #22caa7); cursor: pointer; margin: 0 0.4rem 0 0; vertical-align: middle; }
+        /* Shown while Vim keys are on and a textarea is focused.
+           JS moves it to that box; this is the place before the box is measured. */
+        #vimMode {
+            position: fixed; top: 4.4rem; right: 0.9rem; z-index: 60;
+            pointer-events: none; user-select: none;
+            font-family: ui-monospace, monospace; font-size: 0.72rem; line-height: 1.3;
+            color: var(--h-cloud, #7d8b99); background: var(--h-menu, #0d1c2a); border: 1px solid var(--h-border, #334455);
+            border-radius: 4px; padding: 0.12rem 0.45rem;
+        }
+        /* Drawn over the next character in Vim normal and visual. Insert hides it. */
+        #vimBlockCaret {
+            position: fixed; z-index: 70; display: none; pointer-events: none;
+            box-sizing: border-box;
+        }
+        .tool-toggle:disabled { opacity: 0.4; cursor: not-allowed; }
+        .tool-disabled h3 { color: var(--h-faint, #5a6a78); }
+        .tool-disabled .tool { opacity: 0.55; }
+        .modal-error { color: var(--h-error, #e08080); font-size: 0.8rem; min-height: 1.2em; margin-top: 0.4rem; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; min-width: 0; flex-shrink: 0; }
+        #contextLimitInput { width: 100%; box-sizing: border-box; margin: 0.5rem 0 0.2rem; font-family: ui-monospace, monospace; font-size: 0.9rem; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.35rem 0.45rem; }
+        .provenance { background: var(--h-prov-bg, #2e2410); border-left: 3px solid var(--h-prov-edge, #d0a030); color: var(--h-prov-text, #e8c878); padding: 0.5rem 0.7rem; margin: 0.4rem 0; font-size: 0.8rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; min-width: 0; font-family: system-ui, sans-serif; flex-shrink: 0; }
+        .question-fields { overflow-y: auto; min-height: 0; }
+        #approvalHint { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 25vh; max-width: 100%; min-width: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+        .question-fields fieldset { border: 1px solid var(--h-focus, #4a6a8a); margin: 0.7rem 0; padding: 0.7rem; }
+        .question-fields legend { white-space: pre-wrap; font-weight: bold; }
+        .question-choice { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.4rem 0; cursor: pointer; }
+        .question-choice input { flex-shrink: 0; margin-top: 0.2rem; }
+        .question-choice span { white-space: pre-wrap; }
+        .question-choice small { display: block; color: var(--h-hint, #8a9ab0); margin-top: 0.2rem; white-space: pre-wrap; }
+        #tabbar { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0; align-items: center; }
+        .tab-btn { background: var(--h-inset, #0a1a28); border: 1px solid var(--h-border, #334455); color: var(--h-button-text, #acac79); font-size: 0.8rem; padding: 0.3rem 0.7rem; margin: 0; border-radius: 999px; cursor: pointer; font-family: inherit; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tab-btn.active { background: var(--h-surface, #112233); color: var(--h-active, #caca8a); border-color: var(--h-focus, #4a6a8a); }
+        .tab-btn.running { border-color: var(--h-link, #7ab0d0); color: var(--h-link, #7ab0d0); }
+        #newTabBtn { font-size: 0.8rem; padding: 0.5rem 0.7rem; margin: 0 0 0 0.3rem; }
+        #pruneNote { font-size: 0.78rem; color: var(--h-prune, #b0a080); font-style: italic; min-height: 1.1em; margin-top: 0.3rem; }
+        .row-between { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+        .row-start { display: flex; justify-content: flex-start; align-items: center; gap: 0.5rem; }
+        .row-end { display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; }
+        .row-between button, .row-start button, .row-end button { margin: 0; }
+        /* A thin boundary between the session row's quiet actions (prompt
+           edit, New tab) and New Session, which clears every tab: the eye
+           groups them, and the habitual mouse lands somewhere safe. */
+        .row-divider { align-self: stretch; width: 1px; min-width: 1px; background: var(--h-border, #334455); margin: 0.1rem 0.15rem; }
+        .hist-row { display: flex; gap: 0.6rem; align-items: center; background: var(--h-inset, #0a1a28); border-left: 3px solid var(--h-tool-edge, #4a6a8a); padding: 0.4rem 0.6rem; margin: 0.5rem 0; }
+        .hist-row.hist-interrupted { border-left-color: var(--h-prov-edge, #d0a030); }
+        .hist-row .copy-btn { margin-left: auto; }
+        .hist-link { color: var(--h-link, #7ab0d0); flex: 1; }
+        .hist-fileicon { cursor: help; }
+        .hist-confirm { font-size: 0.8rem; color: var(--h-warning, #e0c080); background: var(--h-menu, #0d1c2a); border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.3rem 0.6rem; margin: 0 0 0.5rem 0; }
+        .hist-confirm a { color: var(--h-link, #7ab0d0); }
+        details.menu { margin-top: 0.8rem; border: none; padding: 0.3rem 0.6rem; font-size: 0.82rem; color: var(--h-hint, #8a9ab0); }
+        details.menu summary { cursor: pointer; }
+        .menu-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin: 0.5rem 0; }
+        .menu-row button { font-size: 0.78rem; padding: 0.3rem 0.7rem; margin: 0; }
+        .menu-hint { font-size: 0.76rem; color: var(--h-menu-label, #77879a); }
+        .menu label { display: flex; gap: 0.4rem; align-items: center; cursor: pointer; }
+        /* The extra 1.4em on top is one line. The vim mode label sits
+           inside the top of the box; this padding keeps the first line
+           below it. The clip height grows by that same line so eight
+           lines still fit. */
+        #prompt { width: 100%; border: 1px solid var(--h-border, #334455); border-radius: 4px; outline: none; background-color: var(--h-surface, #112233); color: var(--h-text, #aaaa77); resize: none; min-height: 100px; overflow-y: hidden; padding: calc(0.5rem + 1.4em) 0.6rem 0.5rem; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 0.9rem; line-height: 1.4; }
+        #prompt.prompt-clipped { height: 13.8em; max-height: 13.8em; overflow-y: auto; }
+        #promptClipStrip { margin: 0.15rem 0 0; }
+        #prompt.expanded { min-height: 60vh; }
+        .editor-bar { display: flex; gap: 0.5rem; align-items: center; justify-content: flex-start; flex: 1 1 auto; margin: 0; min-width: 0; flex-wrap: wrap; }
+        .editor-bar button { font-size: 0.78rem; padding: 0.3rem 0.7rem; margin: 0; }
+        /* One row under the prompt at every width. The count, vim keys,
+           and Save, Copy, Clear, Restore stay on the left. Upload files
+           and Generate take the right end. The top margin is the gap
+           under the prompt box. */
+        #promptDock { display: flex; flex-direction: column; }
+        #promptFrame { display: contents; }
+        #promptMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem 0.75rem; margin: 0.6rem 0 0.35rem; }
+        #prompt { min-width: 0; }
+        #protocolBox { order: 2; }
+        #composerActions { order: 1; align-items: center; margin: 0 0 0 auto; flex-wrap: wrap; }
+        #composerActions #uploadBtn { order: 1; font-size: 0.78rem; padding: 0.3rem 0.7rem; }
+        #composerActions #runBtn { order: 2; }
+        #editorCount { font-size: 0.78rem; color: var(--h-hint, #8a9ab0); margin-right: 0.35rem; font-style: italic; }
+        details.protocol { margin-top: 0.8rem; border: none; border-radius: 4px; padding: 0.3rem 0.6rem; font-size: 0.82rem; color: var(--h-hint, #8a9ab0); }
+        details.protocol summary { cursor: pointer; }
+        details.protocol ul { margin: 0.35rem 0 0.5rem; padding-left: 1.2rem; }
+        details.protocol li { margin: 0.15rem 0; }
+        details.protocol pre { white-space: pre-wrap; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border-radius: 4px; padding: 0.5rem 0.7rem; font-size: 0.8rem; }
+        /* Prism token colors. Each role is its own variable so a preset can
+           split colors that Blue and gold paints with one hex. Scoped to
+           rendered code so plain tool text keeps the base theme. */
+        .rendered-body .token.comment, .rendered-body .token.prolog,
+        .rendered-body .token.doctype, .rendered-body .token.cdata,
+        code[class*="language-"] .token.comment { color: var(--h-tok-comment, #8292a2); font-style: italic; }
+        .rendered-body .token.punctuation,
+        code[class*="language-"] .token.punctuation { color: var(--h-tok-punct, #a0b0c0); }
+        .rendered-body .token.keyword, .rendered-body .token.control,
+        .rendered-body .token.atrule,
+        code[class*="language-"] .token.keyword,
+        code[class*="language-"] .token.control { color: var(--h-tok-keyword, #e6db74); }
+        .rendered-body .token.tag, .rendered-body .token.deleted { color: var(--h-tok-tag, #f92672); }
+        .rendered-body .token.property,
+        code[class*="language-"] .token.property { color: var(--h-tok-property, #f92672); }
+        .rendered-body .token.parameter,
+        code[class*="language-"] .token.parameter { color: var(--h-tok-param, #aaaa77); }
+        .rendered-body .token.constant, .rendered-body .token.symbol,
+        code[class*="language-"] .token.constant { color: var(--h-tok-constant, #f92672); }
+        .rendered-body .token.boolean, .rendered-body .token.number,
+        code[class*="language-"] .token.boolean,
+        code[class*="language-"] .token.number { color: var(--h-tok-number, #ae81ff); }
+        .rendered-body .token.selector, .rendered-body .token.attr-name,
+        .rendered-body .token.string, .rendered-body .token.builtin,
+        .rendered-body .token.inserted,
+        code[class*="language-"] .token.string { color: var(--h-tok-string, #a6e22e); }
+        .rendered-body .token.char,
+        code[class*="language-"] .token.char { color: var(--h-tok-char, #a6e22e); }
+        .rendered-body .token.attr-value,
+        code[class*="language-"] .token.attr-value { color: var(--h-tok-attr, #e6db74); }
+        .rendered-body .token.function, .rendered-body .token.class-name,
+        code[class*="language-"] .token.function { color: var(--h-tok-function, #66d9ef); }
+        .rendered-body .token.operator, .rendered-body .token.entity,
+        .rendered-body .token.variable { color: var(--h-tok-operator, #f8f8f2); }
+        .rendered-body .token.url,
+        code[class*="language-"] .token.url { color: var(--h-tok-url, #f8f8f2); }
+        .rendered-body .token.regex, .rendered-body .token.important { color: var(--h-tok-regex, #fd971f); }
+        .theme-presets { border: 1px solid var(--h-border, #334455); border-radius: 4px; background: var(--h-inset, #0a1a28); max-height: 9rem; overflow-y: auto; margin: 0.35rem 0; padding: 0.25rem; }
+        .theme-preset { display: flex; align-items: center; gap: 0.35rem; margin: 0.12rem 0; }
+        .theme-preset-select { flex: 1; text-align: left; }
+        .theme-preset.active .theme-preset-select { border-color: var(--h-link, #7ab0d0); color: var(--h-title, #caca8a); }
+        .theme-preset-note { color: var(--h-hint, #8a9ab0); font-size: 0.75rem; padding: 0.15rem 0.35rem; }
+        .theme-editor { max-height: 22rem; overflow: auto; border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.35rem 0.5rem; margin: 0.35rem 0; background: var(--h-surface, #112233); max-width: 43%; }
+        /* The preset list and the preset-save form sit under the editor at
+           the same 43% measure, so the whole theme block reads as one
+           column instead of three different widths. */
+        .theme-presets, .theme-save-row { max-width: 43%; }
+        .theme-group { margin: 0.45rem 0 0.15rem; color: var(--h-hint, #8a9ab0); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; }
+        .theme-field { display: flex; align-items: center; gap: 0.4rem; margin: 0.12rem 0; color: var(--h-text, #aaaa77); font-size: 0.78rem; }
+        .theme-field span { flex: 1; min-width: 0; }
+        .theme-field input[type="color"] { width: 2rem; height: 1.35rem; padding: 0; border: 1px solid var(--h-border, #334455); background: transparent; cursor: pointer; }
+        .theme-field input[type="text"], .theme-save-row input { width: 6.2rem; margin: 0; font-family: ui-monospace, monospace; font-size: 0.75rem; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.12rem 0.3rem; }
+        .theme-save-row input { width: auto; flex: 1; }
+        .theme-field input.bad { border-color: var(--h-error, #e08080); }
+        .theme-save-row { display: flex; gap: 0.4rem; align-items: center; margin: 0.35rem 0; }
+        .theme-save-row button, .theme-preset button { margin: 0; }
+        /* Pre-paint fallback for a saved Dark mode that has no color map yet.
+           Once the page applies a theme, colors come from the variables above
+           and this attribute is removed. */
+        html[data-highlight="dark"] body { background-color: #101418; color: #c3cdb8; }
+        html[data-highlight="dark"] textarea,
+        html[data-highlight="dark"] #prompt { background-color: #161b22; color: #c3cdb8; border-color: #2c3644; }
+        html[data-highlight="dark"] #output,
+        html[data-highlight="dark"] #historyView { background-color: #161b22; }
+        html[data-highlight="dark"] .content,
+        html[data-highlight="dark"] .rendered-body,
+        html[data-highlight="dark"] .round h3,
+        html[data-highlight="dark"] .done { color: #c3cdb8; }
+        html[data-highlight="dark"] .thinking-body,
+        html[data-highlight="dark"] .thinking-label { color: #8b95a1; }
+        html[data-highlight="dark"] .thinking { border-color: #3a4554; }
+        html[data-highlight="dark"] .round,
+        html[data-highlight="dark"] .done { border-color: #2c3644; }
+        html[data-highlight="dark"] .rendered-body table { color: #c3cdb8; }
+        html[data-highlight="dark"] .rendered-body th,
+        html[data-highlight="dark"] .rendered-body td { border-color: #2c3644; }
+        html[data-highlight="dark"] .rendered-body th { background: #12171e; color: #c3cdb8; }
+        html[data-highlight="dark"] .rendered-body td { background: #161b22; }
+        html[data-highlight="dark"] .rendered-body a,
+        html[data-highlight="dark"] .toggle-link,
+        html[data-highlight="dark"] .hist-link { color: #8eb4d4; }
+        html[data-highlight="dark"] .tool,
+        html[data-highlight="dark"] .round-preview,
+        html[data-highlight="dark"] .modal pre,
+        html[data-highlight="dark"] .modal textarea,
+        html[data-highlight="dark"] details.protocol pre { background: #0c1014; color: #c3cdb8; }
+        html[data-highlight="dark"] .rendered-body code,
+        html[data-highlight="dark"] .rendered-body pre,
+        html[data-highlight="dark"] .docs-copy code,
+        html[data-highlight="dark"] code[class*="language-"] { background: #0c1014; color: #37a8c7; }
+        html[data-highlight="dark"] .rendered-body pre code,
+        html[data-highlight="dark"] .rendered-body pre code[class*="language-"] { background: transparent; color: inherit; }
+        html[data-highlight="dark"] .modal { background: #161b22; color: #c3cdb8; border-color: #3a4554; }
+        html[data-highlight="dark"] .modal h2 { color: #c3cdb8; }
+        html[data-highlight="dark"] button,
+        html[data-highlight="dark"] .tab-btn,
+        html[data-highlight="dark"] .copy-btn,
+        html[data-highlight="dark"] .sub-tab { background: #0c1014; color: #c3cdb8; border-color: #2c3644; }
+        html[data-highlight="dark"] .tab-btn.active,
+        html[data-highlight="dark"] .sub-tab.sub-tab-active { background: #161b22; color: #33bbdd; border-color: #3a4554; }
+        html[data-highlight="dark"] body.run-docked #runLane,
+        html[data-highlight="dark"] body.run-live #runLane,
+        html[data-highlight="dark"] body.prompt-docked #promptDock,
+        html[data-highlight="dark"] body.approval-docked #approvalOverlay { background: #0c1014; }
+        html[data-highlight="dark"] .rendered-body .token.comment,
+        html[data-highlight="dark"] .rendered-body .token.prolog,
+        html[data-highlight="dark"] .rendered-body .token.doctype,
+        html[data-highlight="dark"] .rendered-body .token.cdata,
+        html[data-highlight="dark"] code[class*="language-"] .token.comment { color: #adb5bd; font-style: italic; }
+        html[data-highlight="dark"] .rendered-body .token.punctuation,
+        html[data-highlight="dark"] code[class*="language-"] .token.punctuation { color: #ced4da; }
+        html[data-highlight="dark"] .rendered-body .token.keyword,
+        html[data-highlight="dark"] .rendered-body .token.control,
+        html[data-highlight="dark"] .rendered-body .token.atrule,
+        html[data-highlight="dark"] .rendered-body .token.tag,
+        html[data-highlight="dark"] .rendered-body .token.deleted,
+        html[data-highlight="dark"] code[class*="language-"] .token.keyword,
+        html[data-highlight="dark"] code[class*="language-"] .token.control { color: #bb55f1; }
+        html[data-highlight="dark"] .rendered-body .token.function,
+        html[data-highlight="dark"] .rendered-body .token.class-name,
+        html[data-highlight="dark"] code[class*="language-"] .token.function { color: #b197fc; }
+        html[data-highlight="dark"] .rendered-body .token.number,
+        html[data-highlight="dark"] .rendered-body .token.boolean,
+        html[data-highlight="dark"] .rendered-body .token.constant,
+        html[data-highlight="dark"] .rendered-body .token.symbol,
+        html[data-highlight="dark"] code[class*="language-"] .token.number,
+        html[data-highlight="dark"] code[class*="language-"] .token.boolean,
+        html[data-highlight="dark"] code[class*="language-"] .token.constant { color: #4dabf7; }
+        html[data-highlight="dark"] .rendered-body .token.string,
+        html[data-highlight="dark"] .rendered-body .token.selector,
+        html[data-highlight="dark"] .rendered-body .token.attr-name,
+        html[data-highlight="dark"] .rendered-body .token.builtin,
+        html[data-highlight="dark"] .rendered-body .token.inserted,
+        html[data-highlight="dark"] code[class*="language-"] .token.string { color: #69db7c; }
+        html[data-highlight="dark"] .rendered-body .token.char,
+        html[data-highlight="dark"] .rendered-body .token.attr-value,
+        html[data-highlight="dark"] code[class*="language-"] .token.char,
+        html[data-highlight="dark"] code[class*="language-"] .token.attr-value { color: #8ce99a; }
+        html[data-highlight="dark"] .rendered-body .token.parameter,
+        html[data-highlight="dark"] .rendered-body .token.property,
+        html[data-highlight="dark"] code[class*="language-"] .token.parameter,
+        html[data-highlight="dark"] code[class*="language-"] .token.property { color: #ffa94d; }
+        html[data-highlight="dark"] .rendered-body .token.operator,
+        html[data-highlight="dark"] .rendered-body .token.entity,
+        html[data-highlight="dark"] .rendered-body .token.variable { color: #e7eaee; }
+        html[data-highlight="dark"] .rendered-body .token.url,
+        html[data-highlight="dark"] code[class*="language-"] .token.url { color: #74c0fc; }
+        html[data-highlight="dark"] .rendered-body .token.regex,
+        html[data-highlight="dark"] .rendered-body .token.important { color: #ffa94d; }
+
+        .modal.web-input { max-width: 1100px; width: 95vw; }
+        .modal.web-input #approvalText { min-height: 35vh; max-height: 50vh; resize: vertical; }
+        .modal.web-input #approvalCmd { flex: 0 1 auto; max-height: 15vh; }
+        .modal.web-input #fetchReviewTabs { flex-shrink: 0; margin-top: 0.3rem; max-width: 100%; min-width: 0; }
+        #rawBodyWrap { flex: 1 1 auto; min-height: 0; min-width: 0; max-width: 100%; display: flex; flex-direction: column; overscroll-behavior: contain; }
+        #rawBodyWrap .hint { margin: 0.2rem 0 0.3rem; flex-shrink: 0; overflow-wrap: anywhere; }
+        .modal.web-input #rawBodyBox { flex: 1 1 auto; min-height: 35vh; max-height: 50vh; margin-top: 0; }
+        /* The resting column is aimed at a 960px screen. At 1920px and wider
+           a live run keeps that column on the right. Tool dialogs use the
+           left half. With no dialog open, the left half is a blank lane.
+           Narrower screens keep the centered dialog. */
+        #runLane { display: none; }
+        #runLaneNote { display: inline-flex; align-items: center; justify-content: center; gap: 0.45em; color: var(--h-cloud, #7d8b99); font-family: system-ui, sans-serif; font-size: 0.95rem; line-height: 1.4; margin: 0; text-align: center; }
+        /* Narrow screens pin the same Thinking / Waiting line to the bottom
+           of the viewport for the whole run. The extra padding lets the
+           last round sit just above that line when the page is scrolled
+           to the end. */
+        @media (max-width: 1919px) {
+            body.run-live {
+                margin-bottom: 0;
+                padding-bottom: 3rem;
+            }
+            body.run-live #runLane {
+                display: flex;
+                position: fixed;
+                z-index: 35;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                box-sizing: border-box;
+                min-height: 2.6rem;
+                align-items: center;
+                justify-content: center;
+                padding: 0.4rem 1rem;
+                background: var(--h-page, #223344);
+                border-top: 1px solid var(--h-border, #334455);
+                pointer-events: none;
+            }
+        }
+        #approvalContextTabs { flex-shrink: 0; margin-top: 0.2rem; }
+        #approvalActionPane, #approvalThinkingPane, #approvalStderrPane { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0; }
+        #approvalThinking, #approvalStderr { min-height: 30vh; max-height: 50vh; }
+        #approvalTextTools { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; align-self: flex-start; margin: 0.35rem 0 0.15rem; }
+        #approvalTextTools button { margin: 0; padding: 0.28rem 0.7rem; font-size: 0.78rem; }
+        @media (min-width: 1920px) {
+            /* Prompt edit is the narrow-screen control. The wide screen
+               keeps the prompt lane open. */
+            #promptEditBtn { display: none; }
+            body.run-docked {
+                max-width: 960px;
+                width: min(960px, calc(50vw - 2rem));
+                margin: 2rem 2rem 2rem 50vw;
+                box-sizing: border-box;
+            }
+            body.run-docked #runLane {
+                display: flex;
+                position: fixed;
+                z-index: 1;
+                top: 0;
+                left: 0;
+                width: 50vw;
+                height: 100vh;
+                box-sizing: border-box;
+                align-items: center;
+                justify-content: center;
+                background: var(--h-dock, #162433);
+                pointer-events: none;
+                padding: 0.75rem;
+            }
+            body.run-docked.approval-docked #runLane { display: none; }
+            body.prompt-docked {
+                max-width: 960px;
+                width: min(960px, calc(50vw - 2rem));
+                margin: 2rem 2rem 2rem 50vw;
+                box-sizing: border-box;
+            }
+            body.prompt-docked #promptDock {
+                display: flex;
+                flex-direction: column;
+                position: fixed;
+                z-index: 2;
+                top: 0;
+                left: 0;
+                width: 50vw;
+                height: 100vh;
+                box-sizing: border-box;
+                padding: 0.75rem;
+                overflow: auto;
+                background: var(--h-dock, #162433);
+            }
+            body.prompt-docked #promptFrame {
+                display: flex;
+                flex-direction: column;
+                position: relative;
+                flex: 1 1 auto;
+                min-height: 16rem;
+                min-width: 0;
+            }
+            body.prompt-docked #prompt,
+            body.prompt-docked #prompt.expanded,
+            body.prompt-docked #prompt.prompt-clipped {
+                flex: 1 1 auto;
+                width: 100%;
+                min-height: 16rem;
+                height: auto;
+                max-height: none;
+            }
+
+            body.run-docked.prompt-docked #promptDock,
+            body.approval-docked.prompt-docked #promptDock { display: none; }
+            body.approval-docked #approvalOverlay {
+                box-sizing: border-box;
+                right: auto;
+                width: 50vw;
+                padding: 0.75rem;
+                background: var(--h-dock, #162433);
+                align-items: stretch;
+                justify-content: stretch;
+            }
+            body.approval-docked #approvalDialog,
+            body.approval-docked #approvalDialog.web-input {
+                width: 100%;
+                max-width: none;
+                height: 100%;
+                max-height: calc(100vh - 1.5rem);
+            }
+            body.approval-docked #approvalContextTabs { display: none; }
+            body.approval-docked #approvalDialog.has-stderr #approvalContextTabs { display: flex; }
+            body.approval-docked #approvalDialog.has-stderr #approvalThinkingTab { display: none; }
+            body.approval-docked #approvalText,
+            body.approval-docked #rawBodyBox,
+            body.approval-docked #approvalThinking,
+            body.approval-docked #approvalStderr {
+                flex: 1 1 auto;
+                max-height: none;
+                min-height: 8rem;
+            }
+        }
+
+        .memory-form { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.6rem 0; max-width: 42rem; }
+        .memory-label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
+        .memory-input, .memory-form textarea { width: 100%; box-sizing: border-box; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border: 1px solid var(--h-border, #334455); border-radius: 4px; font-family: ui-monospace, monospace; font-size: 0.85rem; padding: 0.35rem 0.45rem; }
+        .memory-project { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; margin: 0.45rem 0; }
+        .memory-project .metrics { flex-basis: 100%; }
+        .memory-block { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--h-inset, #0a1a28); border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.5rem; max-height: 16rem; overflow: auto; }
+        .memory-notes { width: 100%; border-collapse: collapse; }
+        .memory-notes th, .memory-notes td { border-bottom: 1px solid var(--h-border, #334455); text-align: left; vertical-align: top; padding: 0.35rem 0.5rem; font-size: 0.85rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .memory-picker select { margin-left: 0.35rem; }

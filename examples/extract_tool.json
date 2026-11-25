@@ -1,0 +1,20 @@
+{
+  "name": "extract_tool",
+  "description": "Extract lines matching a pattern from a workspace text file. Use for repetitive searching/parsing instead of catting whole files.",
+  "executable": "./examples/extract_tool.py",
+  "argv": ["./examples/extract_tool.py", "--input", "{input}", "--pattern", "{pattern}"],
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "input": {
+        "type": "string",
+        "description": "Path to the input text file in the workspace directory"
+      },
+      "pattern": {
+        "type": "string",
+        "description": "Literal substring to search for (case sensitive)"
+      }
+    },
+    "required": ["input", "pattern"]
+  }
+}

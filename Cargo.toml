@@ -1,0 +1,51 @@
+[package]
+name = "llm_rnd_harness"
+version = "0.1.0"
+edition = "2024"
+description = "A local, single-user LLM research and diagnostics harness: every tool call waits for a person's approval."
+license = "MIT"
+readme = "README.md"
+# Fill in once the public repository exists:
+# repository = "https://github.com/<you>/llm_rnd_harness"
+keywords = ["llm", "agent", "human-in-the-loop", "ollama", "diagnostics"]
+
+[dependencies]
+ollama-rs = { version = "0.3.6", features = ["macros", "stream"] }
+# Direct client so chat requests can carry `tool_name`. ollama-rs 0.3.6's
+# ChatMessage has no such field, and its HTTP client is crate-private.
+reqwest = { version = "0.12.28", default-features = false, features = ["json", "stream", "native-tls"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "net", "time", "process", "sync", "signal"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ammonia = "4"
+# bundled-sqlcipher replaces the bundled SQLite with SQLCipher (AES-256
+# pages). RAG corpora stay ordinary SQLite files: they are opened with no key.
+rusqlite = { version = "0.37", features = ["bundled-sqlcipher"] }
+# Passphrase encryption for ~/.config/harness-keys. The scrypt work factor
+# stays at the age default. RAG files and the page are not encrypted here.
+# 0.12 still writes age-encryption.org/v1 scrypt files. 0.11 pulled
+# proc-macro-error2, which re-exports a private `extern crate proc_macro`
+# (rust-lang/rust#127909) and is unmaintained.
+age = "0.12"
+# Already in the tree (transitive); direct dep for the icon data URI.
+base64 = "0.22"
+# view_img: sha256 at read time, and image normalization to PNG. sha2 is
+# already built transitively (via age/scrypt); only the codecs the tool
+# actually decodes/encodes are enabled, so the dep stays as small as it can.
+sha2 = "0.10"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
+# Line diffs for the approval dialog and history edit clips. `inline`
+# marks changed words inside a replaced line. `unicode` splits those
+# words on Unicode boundaries so a long shell chain still highlights
+# the part that changed.
+similar = { version = "2.7", features = ["inline", "unicode"] }
+# Password bytes are wiped on drop. `Zeroizing` does not implement a
+# secret-printing Debug of its own beyond what we avoid deriving.
+zeroize = { version = "1", features = ["std"] }
+
+# Unix-only: killing a tool's whole process group when it overruns the
+# output cap or the timeout (see src/tools/capture.rs).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
