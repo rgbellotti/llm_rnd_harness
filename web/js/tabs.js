@@ -508,9 +508,11 @@ function renderConfig() {
         + (c.model_cloud ? ' (' + cloudEgressLabel() + ')' : ' (local)')
         + '\nmax_tool_rounds: ' + (c.max_tool_rounds == null ? 'unlimited' : c.max_tool_rounds)
         + '\nworkspace: ' + (c.workspace_dir || '(unknown)')
-        + '\nreasoning effort: ' + (c.reasoning_effort || 'high') + ' (next Grok run; Ollama ignores it)'
         + '\ngrok api: ' + (c.grok_key ? 'XAI_API_KEY is loaded' : 'XAI_API_KEY is not set')
+        + '\nreflection api: ' + (c.reflection_key ? 'REFLECTION_API_KEY is loaded' : 'REFLECTION_API_KEY is not set')
         + '\nopencode api: ' + (c.opencode_key ? 'OPENCODE_API_KEY is loaded' : 'OPENCODE_API_KEY is not set')
+        + '\nollama server: ' + (c.ollama_server ? 'running' : 'not reachable')
+        + '\nharness db key: ' + (c.harness_db_key ? 'HARNESS_DB_KEY is loaded' : 'HARNESS_DB_KEY is not set')
         + '\ncustom files: ' + (c.custom_files.length ? c.custom_files.join(', ') : '(none — run_cmd only)');
     meta.textContent = metaText;
     head.appendChild(meta);

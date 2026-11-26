@@ -126,6 +126,19 @@ pub(crate) fn provider_key_available(key_env: &str) -> bool {
     }
 }
 
+/// Whether the history passphrase is loaded, without exposing it to the page.
+pub(crate) fn db_key_available() -> bool {
+    match LOADED.get() {
+        Some(loaded) => loaded
+            .db_key
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        None => std::env::var("HARNESS_DB_KEY")
+            .ok()
+            .is_some_and(|value| !value.trim().is_empty()),
+    }
+}
+
 /// `Some` after [`prepare`]. The inner value is the history passphrase, if stored.
 pub(crate) fn installed_db_key() -> Option<Option<String>> {
     LOADED.get().map(|loaded| loaded.db_key.clone())

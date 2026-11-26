@@ -788,6 +788,10 @@ struct ConfigResponse {
     reflection_key: bool,
     /// True when `OPENCODE_API_KEY` is set. The key itself stays on the server.
     opencode_key: bool,
+    /// True when the Ollama daemon answered a reachability probe.
+    ollama_server: bool,
+    /// True when `HARNESS_DB_KEY` is loaded. The passphrase stays on the server.
+    harness_db_key: bool,
     /// Project memory catalog for the config and tools dropdowns. Notes stay
     /// on `/memory`; this is only the names and the selection.
     memory_recording: bool,
@@ -1088,9 +1092,11 @@ pub(crate) async fn config_handler(State(state): State<AppState>) -> impl IntoRe
     let role = crate::config::role_settings();
     let (memory_recording, memory_error, memory_project, memory_projects) =
         state.memory.catalog().await;
-    let decision_installed = crate::models::installed_decision_models(&state.ollama)
-        .await
-        .unwrap_or_default();
+    let (ollama_server, decision_installed) = tokio::join!(
+        crate::models::ollama_server_available(&state.ollama),
+        crate::models::installed_decision_models(&state.ollama),
+    );
+    let decision_installed = decision_installed.unwrap_or_default();
     let decision_models = crate::models::decision_model_groups_json(&decision_installed);
     Json(ConfigResponse {
         model_cloud: crate::config::is_cloud_model(&model),
@@ -1136,6 +1142,8 @@ pub(crate) async fn config_handler(State(state): State<AppState>) -> impl IntoRe
             .and_then(|spec| spec.key_env)
             .map(crate::keys::provider_key_available)
             .unwrap_or(false),
+        ollama_server,
+        harness_db_key: crate::keys::db_key_available(),
         memory_recording: memory_recording,
         memory_error,
         memory_project,
@@ -1764,6 +1772,11 @@ mod interaction_tests {
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["history_recording"], true);
         assert!(json["history_error"].is_null());
+        assert!(json["grok_key"].is_boolean());
+        assert!(json["reflection_key"].is_boolean());
+        assert!(json["opencode_key"].is_boolean());
+        assert!(json["ollama_server"].is_boolean());
+        assert!(json["harness_db_key"].is_boolean());
         let tag = json["comment_tag"].as_str().unwrap();
         assert_eq!(tag.len(), 20, "{tag}");
         assert!(tag.bytes().all(|byte| byte.is_ascii_hexdigit()), "{tag}");

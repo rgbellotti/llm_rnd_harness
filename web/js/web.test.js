@@ -366,6 +366,8 @@ const showWeb = id => sandbox.showApprovalModal({
         model: 'local-test', model_cloud: false, max_tool_rounds: null,
         workspace_dir: '/tmp', custom_files: [], system_prompt: 'prompt',
         enabled_tools: ['run_cmd'], review_run_cmd: false,
+        reasoning_effort: 'xhigh', grok_key: true, reflection_key: true,
+        opencode_key: true, ollama_server: true, harness_db_key: true,
         tools: [{ function: { name: 'run_cmd' } }], tool_meta: []
     }) + '; renderConfig()');
     const findId = (node, id) => {
@@ -391,6 +393,12 @@ const showWeb = id => sandbox.showApprovalModal({
     scan(document.getElementById('configView').children[1]);
     assert.match(rowText, /\(local\)/);
     assert.match(rowText, /Review run_cmd output/);
+    assert.match(rowText, /XAI_API_KEY is loaded/);
+    assert.match(rowText, /REFLECTION_API_KEY is loaded/);
+    assert.match(rowText, /OPENCODE_API_KEY is loaded/);
+    assert.match(rowText, /ollama server: running/);
+    assert.match(rowText, /HARNESS_DB_KEY is loaded/);
+    assert.equal(rowText.includes('reasoning effort:'), false);
     assert.equal(rowText.includes('On by default'), false);
     assert.equal(rowText.includes('i enters insert'), false);
     const vimBox = findId(document.getElementById('configView'), 'vim-editing');

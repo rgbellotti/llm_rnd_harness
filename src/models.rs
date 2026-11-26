@@ -227,6 +227,16 @@ fn ollama_api_url(ollama: &Ollama, path: &str) -> String {
     )
 }
 
+/// Whether the Ollama daemon answered its root endpoint successfully.
+/// This is a reachability check only: an empty model list is still running.
+pub(crate) async fn ollama_server_available(ollama: &Ollama) -> bool {
+    let url = format!("{}/", ollama.url_str().trim_end_matches('/'));
+    match ollama_tags_client().get(url).send().await {
+        Ok(response) => response.status().is_success(),
+        Err(_) => false,
+    }
+}
+
 pub(crate) fn parse_tags(bytes: &[u8]) -> Result<Vec<TagModel>, String> {
     serde_json::from_slice::<TagsBody>(bytes)
         .map(|body| body.models)
@@ -654,6 +664,31 @@ pub(crate) fn decision_model_groups_json(installed: &InstalledModels) -> String 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn ollama_server_availability_checks_the_root_endpoint() {
+        use axum::{Router, routing::get};
+
+        let app = Router::new().route("/", get(|| async { "Ollama is running" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let running = Ollama::builder()
+            .host("http://127.0.0.1")
+            .port(address.port())
+            .build();
+        assert!(ollama_server_available(&running).await);
+        server.abort();
+
+        let reserved = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let stopped_port = reserved.local_addr().unwrap().port();
+        drop(reserved);
+        let stopped = Ollama::builder()
+            .host("http://127.0.0.1")
+            .port(stopped_port)
+            .build();
+        assert!(!ollama_server_available(&stopped).await);
+    }
 
     #[test]
     fn model_blocked_names_what_a_first_launch_is_missing() {
