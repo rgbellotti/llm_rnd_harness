@@ -703,6 +703,10 @@
         .hist-fileicon { cursor: help; }
         .hist-confirm { font-size: 0.8rem; color: var(--h-warning, #e0c080); background: var(--h-menu, #0d1c2a); border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.3rem 0.6rem; margin: 0 0 0.5rem 0; }
         .hist-confirm a { color: var(--h-link, #7ab0d0); }
+        .history-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.6rem; margin: 0.8rem 0 0.2rem; padding-top: 0.6rem; border-top: 1px solid var(--h-border, #334455); }
+        .history-pagination .tab-btn { font-size: 0.78rem; padding: 0.3rem 0.7rem; }
+        .history-pagination [hidden] { display: none !important; }
+        .history-page-position { color: var(--h-hint, #8a9ab0); font-size: 0.8rem; white-space: nowrap; }
         details.menu { margin-top: 0.8rem; border: none; padding: 0.3rem 0.6rem; font-size: 0.82rem; color: var(--h-hint, #8a9ab0); }
         details.menu summary { cursor: pointer; }
         .menu-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin: 0.5rem 0; }

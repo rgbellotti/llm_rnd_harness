@@ -864,9 +864,12 @@ Two stores with split roles:
   unreadable without `HARNESS_DB_KEY`. The passphrase is not stored in
   the file. RAG corpora (`*.rag.db`) are separate and stay ordinary
   SQLite. The **history** button (top row) lists past sessions by
-  auto-title and date; each opens read-only with JSON/HTML export, shows
-  which files were uploaded (hover the file icon), and can be deleted to
-  conserve disk. History never feeds back into the model. The database
+  auto-title and date, 20 at a time, with First / Previous / Next / Last
+  controls, the current page range, and the total recorded count. Each
+  opens read-only with JSON/HTML export, shows which files were uploaded
+  (hover the file icon), and can be deleted to conserve disk. Opening a
+  session and returning to the list keeps your place. History never feeds
+  back into the model. The database
   (and its write-ahead log) is created private to your user account
   (`0600`): transcripts hold everything the model read. Deleted space is
   reused inside the file; the file itself is compacted once a tenth of
@@ -1035,8 +1038,9 @@ Backend (`src/`, one concern per module):
 - `tools/registry.rs` — JSON tool specs: validation, argv expansion, execution.
 - `history.rs` — permanent SQLite session records and event replay.
   `GET /history` lists them newest-first and takes an optional `?limit=N`
-  cap (default unbounded); the per-run reads stay unbounded because
-  export and continue need full content.
+  cap (default unbounded); `GET /history/page?limit=20&offset=0` returns
+  one summary page plus the total count for the history tab. The per-run
+  reads stay unbounded because export and continue need full content.
 - `harden.rs` — re-exec when the keys were in the starting environment, and mark the process non-dumpable.
 - `keys.rs` — encrypted `harness-keys` file. The startup password is typed each launch.
 - `markdown.rs` — model-response markdown conversion + HTML sanitizing.

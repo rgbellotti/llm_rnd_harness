@@ -78,6 +78,9 @@ pub(crate) const APP_JS: &str = concat!(
     include_str!("../web/js/boot.js"),
 );
 
+/// Debug reads and the source-consistency test use this list; release
+/// builds serve the compiled-in `APP_JS` and do not need disk paths.
+#[cfg(any(debug_assertions, test))]
 pub(crate) const WEB_JS_FILES: &[&str] = &[
     "web/js/core.js",
     "web/js/icon.js",
@@ -123,6 +126,7 @@ pub(crate) const WEB_JS_FILES: &[&str] = &[
     "web/js/boot.js",
 ];
 
+#[cfg(any(debug_assertions, test))]
 pub(crate) fn read_web_page() -> Result<(String, String, String), std::io::Error> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let html = std::fs::read_to_string(root.join("web/index.html"))?;

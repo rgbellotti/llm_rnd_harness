@@ -66,13 +66,11 @@ use config::{CUSTOM_TOOLS, index_html, parse_cli};
 use history::HistoryDb;
 use ollama_rs::Ollama;
 use server::{
-    approve_handler, config_handler, context_window_handler, decision_handler, decision_model_handler,
-    default_model_handler, diff_handler,
-    generate_handler,
+    approve_handler, config_handler, context_window_handler, decision_handler,
+    decision_model_handler, default_model_handler, diff_handler, generate_handler,
     history_delete_handler, history_event_handler, history_get_handler, history_list_handler,
-    history_rounds_handler,
-    model_handler, reasoning_effort_handler, render_handler, role_handler, run_cmd_review_handler,
-    stop_handler, tools_handler,
+    history_page_handler, history_rounds_handler, model_handler, reasoning_effort_handler,
+    render_handler, role_handler, run_cmd_review_handler, stop_handler, tools_handler,
 };
 use tools::registry::load_custom_tools;
 
@@ -374,6 +372,7 @@ async fn async_main() {
         .route("/config", get(config_handler))
         .route("/workspace", get(server::workspace_handler))
         .route("/history", get(history_list_handler))
+        .route("/history/page", get(history_page_handler))
         .route("/memory", get(server::memory_get_handler))
         .route("/memory/projects", post(server::memory_create_handler))
         .route("/memory/select", post(server::memory_select_handler))

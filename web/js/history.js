@@ -28,6 +28,9 @@ function historyRowLabel(run, when) {
 // The recording-failure banner takes the same element when history cannot
 // be written.
 let announcedInterruptedId = '';
+const HISTORY_PAGE_SIZE = 20;
+let historyListPage = 0;
+let historyListRequest = 0;
 function seenInterruptedId() {
     try { return localStorage.getItem('harness.interrupted.seen') || ''; } catch (e) { return ''; }
 }
@@ -83,6 +86,7 @@ async function showHistory() {
     setStatus('');
     // renderTabBar parks or hides the composer for this width.
     renderTabBar();
+    historyListPage = 0;
     await renderHistoryList();
 }
 // createSession closes this view. Curate on a wide screen opens it
@@ -105,16 +109,73 @@ function reopenHistoryPane() {
     if (typeof renderTabBar === 'function') renderTabBar();
 }
 
+function scrollHistoryListHead() {
+    const head = document.getElementById('history-list-head');
+    if (head && typeof scrollBlockBelowDashboard === 'function') scrollBlockBelowDashboard(head);
+}
+async function changeHistoryPage(next) {
+    if (!Number.isInteger(next) || next < 0) return;
+    historyListPage = next;
+    await renderHistoryList();
+    scrollHistoryListHead();
+}
+function appendHistoryPagination(parent, total, pageCount) {
+    if (!total) return;
+    const nav = document.createElement('nav');
+    nav.className = 'history-pagination';
+    nav.setAttribute('aria-label', 'Session history pages');
+    const first = document.createElement('button');
+    first.type = 'button';
+    first.className = 'tab-btn';
+    first.textContent = 'First';
+    first.hidden = historyListPage === 0;
+    first.onclick = () => changeHistoryPage(0);
+    const previous = document.createElement('button');
+    previous.type = 'button';
+    previous.className = 'tab-btn';
+    previous.textContent = '← Previous';
+    previous.hidden = historyListPage === 0;
+    previous.onclick = () => changeHistoryPage(historyListPage - 1);
+    const position = document.createElement('span');
+    position.className = 'history-page-position';
+    position.setAttribute('aria-live', 'polite');
+    position.textContent = 'Page ' + (historyListPage + 1) + ' of ' + pageCount;
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'tab-btn';
+    next.textContent = 'Next →';
+    next.hidden = historyListPage >= pageCount - 1;
+    next.onclick = () => changeHistoryPage(historyListPage + 1);
+    const last = document.createElement('button');
+    last.type = 'button';
+    last.className = 'tab-btn';
+    last.textContent = 'Last';
+    last.hidden = historyListPage >= pageCount - 1;
+    last.onclick = () => changeHistoryPage(pageCount - 1);
+    nav.appendChild(first);
+    nav.appendChild(previous);
+    nav.appendChild(position);
+    nav.appendChild(next);
+    nav.appendChild(last);
+    parent.appendChild(nav);
+}
 async function renderHistoryList() {
+    const request = ++historyListRequest;
     if (typeof clearHistoryScroll === 'function') clearHistoryScroll();
     const hv = document.getElementById('historyView');
     hv.innerHTML = '<div class="round"><p>Loading history…</p></div>';
-    let runs;
+    let page;
     try {
-        const res = await apiFetch('/history');
+        const offset = historyListPage * HISTORY_PAGE_SIZE;
+        const res = await apiFetch('/history/page?limit=' + HISTORY_PAGE_SIZE + '&offset=' + offset);
         if (!res.ok) throw new Error(await res.text() || ('HTTP ' + res.status));
-        runs = await res.json();
+        page = await res.json();
+        if (request !== historyListRequest) return;
+        if (!page || !Array.isArray(page.runs) || !Number.isSafeInteger(page.total) || page.total < 0) {
+            throw new Error('Unexpected history page response.');
+        }
     } catch (e) {
+        if (request !== historyListRequest) return;
         hv.innerHTML = '';
         const d = document.createElement('div');
         d.className = 'error';
@@ -122,13 +183,30 @@ async function renderHistoryList() {
         hv.appendChild(d);
         return;
     }
+    const runs = page.runs;
+    const total = page.total;
+    const pageCount = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
+    // A deletion can remove the last row of the current page. Re-read the
+    // new final page rather than leaving an empty page with Previous active.
+    if (historyListPage >= pageCount) {
+        historyListPage = pageCount - 1;
+        return renderHistoryList();
+    }
     hv.innerHTML = '';
     const head = document.createElement('div');
     head.className = 'round';
+    head.id = 'history-list-head';
     const paneTitle = document.createElement('h2');
     paneTitle.className = 'pane-title';
-    paneTitle.textContent = 'Session history (' + runs.length + ' recorded)';
+    paneTitle.textContent = 'Session history (' + total + ' recorded)';
     hv.appendChild(paneTitle);
+    const summary = document.createElement('div');
+    summary.className = 'metrics history-page-summary';
+    summary.setAttribute('aria-live', 'polite');
+    const first = total ? historyListPage * HISTORY_PAGE_SIZE + 1 : 0;
+    const last = total ? Math.min(total, first + runs.length - 1) : 0;
+    summary.textContent = total ? 'Showing ' + first + '–' + last + ' of ' + total : '';
+    head.appendChild(summary);
     const hint = document.createElement('div');
     hint.className = 'metrics';
     hint.textContent = 'Opening a session does not send it to the model. Curate appends its text into the prompt, or export a copy. On a wide screen the prompt stays open beside this list.';
@@ -200,6 +278,7 @@ async function renderHistoryList() {
         row.appendChild(del);
         hv.appendChild(row);
     }
+    appendHistoryPagination(hv, total, pageCount);
 }
 
 async function openHistory(id) {

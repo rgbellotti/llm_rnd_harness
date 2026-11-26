@@ -6,6 +6,13 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
 
 ## [Unreleased]
 
+### Added
+
+- The **history** tab now loads 20 session summaries per page with
+  First / Previous / Next / Last controls, a page-range summary, and the
+  total recorded count. Returning from an open session keeps the current
+  page; deleting the last row on a page moves back to the new final page.
+
 ### Security
 
 - The per-launch user comment marker is now the first 20 hex characters

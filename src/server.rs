@@ -579,6 +579,49 @@ pub(crate) async fn history_list_handler(
     Json(state.history.list_runs(limit).await).into_response()
 }
 
+/// `GET /history/page` — one summary page plus the total row count.
+/// The older `/history` response stays an array for existing callers.
+#[derive(serde::Deserialize)]
+pub(crate) struct HistoryPageQuery {
+    #[serde(default)]
+    limit: Option<String>,
+    #[serde(default)]
+    offset: Option<String>,
+}
+
+fn history_page_count(raw: Option<&str>, field: &str, default: usize) -> Result<usize, String> {
+    let Some(raw) = raw else { return Ok(default) };
+    match raw.trim().parse::<usize>() {
+        Ok(n) if i64::try_from(n).is_ok() => Ok(n),
+        _ => Err(format!("{field} {raw:?} is not a non-negative integer")),
+    }
+}
+
+pub(crate) async fn history_page_handler(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<HistoryPageQuery>,
+) -> impl IntoResponse {
+    let limit = match history_page_count(query.limit.as_deref(), "limit", 20) {
+        Ok(limit) => limit,
+        Err(reason) => return (StatusCode::BAD_REQUEST, reason).into_response(),
+    };
+    let offset = match history_page_count(query.offset.as_deref(), "offset", 0) {
+        Ok(offset) => offset,
+        Err(reason) => return (StatusCode::BAD_REQUEST, reason).into_response(),
+    };
+    match state.history.list_runs_page(limit, offset).await {
+        Some(page) => Json(page).into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            state
+                .history
+                .failure_reason()
+                .unwrap_or_else(|| "History is unavailable.".to_string()),
+        )
+            .into_response(),
+    }
+}
+
 pub(crate) async fn history_get_handler(
     State(state): State<AppState>,
     axum::extract::Path(id): axum::extract::Path<String>,
@@ -2716,6 +2759,67 @@ mod interaction_tests {
             .unwrap();
         let text = String::from_utf8(bytes.to_vec()).unwrap();
         assert!(text.contains("abc"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn history_page_defaults_to_twenty_and_validates_the_window() {
+        let state = test_state(":memory:");
+        for i in 0..25 {
+            state
+                .history
+                .create_run(&format!("run-{i:02}"), "title", "model", "prompt", &[], &[], "tag")
+                .await;
+        }
+        let response = history_page_handler(
+            State(state.clone()),
+            axum::extract::Query(HistoryPageQuery {
+                limit: None,
+                offset: None,
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        assert_eq!(body["total"], 25);
+        assert_eq!(body["limit"], 20);
+        assert_eq!(body["offset"], 0);
+        assert_eq!(body["runs"].as_array().unwrap().len(), 20);
+
+        let response = history_page_handler(
+            State(state.clone()),
+            axum::extract::Query(HistoryPageQuery {
+                limit: Some("20".into()),
+                offset: Some("20".into()),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        assert_eq!(body["total"], 25);
+        assert_eq!(body["offset"], 20);
+        assert_eq!(body["runs"].as_array().unwrap().len(), 5);
+
+        for query in [
+            HistoryPageQuery {
+                limit: Some("abc".into()),
+                offset: None,
+            },
+            HistoryPageQuery {
+                limit: None,
+                offset: Some("-1".into()),
+            },
+            HistoryPageQuery {
+                limit: Some("9223372036854775808".into()),
+                offset: None,
+            },
+        ] {
+            let response = history_page_handler(State(state.clone()), axum::extract::Query(query))
+                .await
+                .into_response();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
     }
 
     // Manual testing is for the reviewable tools only. Assert behavior

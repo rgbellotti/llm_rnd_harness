@@ -301,7 +301,7 @@ impl HistoryDb {
                 "SELECT id, title, created_at, model, status, totals_prompt, totals_completion,
                         wall_ms, tool_names, uploaded_files,
                         (SELECT COALESCE(MAX(round), 0) FROM events WHERE events.run_id = runs.id) AS rounds
-                 FROM runs ORDER BY created_at DESC LIMIT ?1",
+                 FROM runs ORDER BY created_at DESC, id DESC LIMIT ?1",
             )?;
             let rows = stmt.query_map([limit], |row| {
                 Ok(serde_json::json!({
@@ -322,6 +322,46 @@ impl HistoryDb {
         })
         .await
         .unwrap_or_default()
+    }
+
+    /// One summary page and its total, read under the same connection
+    /// lock. `id` breaks timestamp ties so consecutive pages cannot
+    /// duplicate or skip a run created in the same millisecond.
+    pub(crate) async fn list_runs_page(&self, limit: usize, offset: usize) -> Option<Value> {
+        let limit = i64::try_from(limit).ok()?;
+        let offset = i64::try_from(offset).ok()?;
+        self.with_conn("list_runs_page", move |conn| {
+            let total: i64 = conn.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
+            let mut stmt = conn.prepare(
+                "SELECT id, title, created_at, model, status, totals_prompt, totals_completion,
+                        wall_ms, tool_names, uploaded_files,
+                        (SELECT COALESCE(MAX(round), 0) FROM events WHERE events.run_id = runs.id) AS rounds
+                 FROM runs ORDER BY created_at DESC, id DESC LIMIT ?1 OFFSET ?2",
+            )?;
+            let rows = stmt.query_map([limit, offset], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>(0)?,
+                    "title": row.get::<_, String>(1)?,
+                    "created_at": row.get::<_, i64>(2)?,
+                    "model": row.get::<_, String>(3)?,
+                    "status": row.get::<_, String>(4)?,
+                    "totals_prompt": row.get::<_, i64>(5)?,
+                    "totals_completion": row.get::<_, i64>(6)?,
+                    "wall_ms": row.get::<_, i64>(7)?,
+                    "tool_names": row.get::<_, String>(8)?,
+                    "uploaded_files": row.get::<_, String>(9)?,
+                    "rounds": row.get::<_, i64>(10)?,
+                }))
+            })?;
+            let runs = rows.collect::<Result<Vec<_>, _>>()?;
+            Ok(serde_json::json!({
+                "runs": runs,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }))
+        })
+        .await
     }
 
     /// A missing run is `Some(None)`: it is a 404, not a database
@@ -1877,6 +1917,49 @@ mod history_tests {
         assert!(db.list_runs(Some(0)).await.is_empty());
         // A cap beyond the table is the table, not an error.
         assert_eq!(db.list_runs(Some(50)).await.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn run_pages_are_stable_and_report_the_total() {
+        let db = test_db("list-page.db");
+        for i in 0..45 {
+            let id = format!("run-{i:02}");
+            db.create_run(&id, "t", "m", "p", &[], &[], "tag").await;
+        }
+        // Force the tie: the id tiebreak must keep page boundaries stable
+        // even when every run has the same creation millisecond.
+        {
+            let conn = db.inner.as_ref().unwrap().lock().unwrap();
+            conn.execute("UPDATE runs SET created_at = 1", []).unwrap();
+        }
+        let all = db.list_runs(None).await;
+        let expected: Vec<_> = all.iter().map(|run| run["id"].as_str().unwrap()).collect();
+        assert_eq!(expected[0], "run-44");
+        assert_eq!(expected[44], "run-00");
+
+        let first = db.list_runs_page(20, 0).await.unwrap();
+        assert_eq!(first["total"], 45);
+        assert_eq!(first["limit"], 20);
+        assert_eq!(first["offset"], 0);
+        let second = db.list_runs_page(20, 20).await.unwrap();
+        let third = db.list_runs_page(20, 40).await.unwrap();
+        let mut actual: Vec<_> = [&first, &second, &third]
+            .into_iter()
+            .flat_map(|page| page["runs"].as_array().unwrap().iter())
+            .map(|run| run["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(actual.len(), 45);
+        assert_eq!(actual, expected);
+        actual.dedup();
+        assert_eq!(actual.len(), 45, "pages must not duplicate a tied row");
+        assert_eq!(third["runs"].as_array().unwrap().len(), 5);
+
+        let empty = db.list_runs_page(20, 100).await.unwrap();
+        assert_eq!(empty["total"], 45);
+        assert!(empty["runs"].as_array().unwrap().is_empty());
+        let zero = db.list_runs_page(0, 0).await.unwrap();
+        assert_eq!(zero["total"], 45);
+        assert!(zero["runs"].as_array().unwrap().is_empty());
     }
 
     #[tokio::test]
