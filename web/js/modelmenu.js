@@ -1,6 +1,7 @@
 // modelmenu.js — load after tabs.js. The model name in the header is the
-// toggle for the model selector: a compact dropdown with the OLLAMA/LOCAL/GROK
-// groups, enabled only while no run is in flight (same rule as the server,
+// toggle for the model selector: a compact dropdown with the
+// OLLAMA/LOCAL/GROK/REFLECTION/OPENCODE groups, enabled only while no run is
+// in flight (same rule as the server,
 // which enforces it via the single-run semaphore). Switching swaps the model
 // for the next run; the running chain, if any, is untouched.
 let modelMenuBuilt = false;

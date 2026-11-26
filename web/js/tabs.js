@@ -510,6 +510,7 @@ function renderConfig() {
         + '\nworkspace: ' + (c.workspace_dir || '(unknown)')
         + '\nreasoning effort: ' + (c.reasoning_effort || 'high') + ' (next Grok run; Ollama ignores it)'
         + '\ngrok api: ' + (c.grok_key ? 'XAI_API_KEY is loaded' : 'XAI_API_KEY is not set')
+        + '\nopencode api: ' + (c.opencode_key ? 'OPENCODE_API_KEY is loaded' : 'OPENCODE_API_KEY is not set')
         + '\ncustom files: ' + (c.custom_files.length ? c.custom_files.join(', ') : '(none — run_cmd only)');
     meta.textContent = metaText;
     head.appendChild(meta);

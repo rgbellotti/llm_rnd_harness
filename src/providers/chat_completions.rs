@@ -1,7 +1,7 @@
 //! The shared OpenAI-style Chat Completions client. One transport serves
-//! every provider whose `Transport` is `ChatCompletions`: today xAI
-//! (Grok) and Reflection; the next compatible provider is a spec entry,
-//! not a new client.
+//! every provider whose `Transport` is `ChatCompletions`: xAI (Grok),
+//! Reflection, and OpenCode Console. The next compatible provider is a
+//! spec entry, not a new client.
 //!
 //! The tool loop stays in [`crate::stream`]. This module translates one
 //! round into a streaming `POST {spec.chat_url}/…` and turns the SSE
@@ -11,8 +11,9 @@
 //! `reasoning_effort` is sent, and whether the reasoning trace must be
 //! replayed on earlier assistant messages (Reflection requires it —
 //! verified live 2026-11-17; xAI does not want it). Server-side search
-//! stays off for both: the request carries no search field, and
-//! retrieval goes through the harness tools, which wait for approval.
+//! stays off for every Chat Completions provider: the request carries no
+//! search field, and retrieval goes through the harness tools, which wait
+//! for approval.
 //!
 //! Reasoning tokens are billed separately from visible completion
 //! tokens: a usage object can report `completion_tokens: 9` and
@@ -88,6 +89,15 @@ pub(crate) fn ticks_to_usd(ticks: u64) -> f64 {
     ticks as f64 / TICKS_PER_USD
 }
 
+/// Stable conversation id sent under the provider's cache/session header.
+pub(crate) fn conversation_header_value(spec: &ProviderSpec, id: &str) -> Option<String> {
+    let id = id.trim();
+    if id.is_empty() || spec.cache_conversation_header.is_none() {
+        return None;
+    }
+    Some(format!("{}{}", spec.conversation_id_prefix.unwrap_or(""), id))
+}
+
 /// The reasoning field an outbound assistant message carries, per spec:
 /// Reflection requires the trace replayed (verified: a multi-round
 /// request without it is rejected with HTTP 400
@@ -137,7 +147,7 @@ pub(crate) fn request_body(
 ) -> Value {
     let messages: Vec<Value> = messages.iter().map(message_json).collect();
     let mut body = json!({
-        "model": model,
+        "model": super::upstream_model_name(spec, model),
         "messages": messages,
         "stream": true,
         "stream_options": { "include_usage": true },
@@ -411,6 +421,12 @@ fn read_usage(accum: &mut Accum, usage: &Value) {
         .and_then(|item| item.as_u64())
     {
         accum.cost_usd_ticks = Some(ticks);
+    } else if let Some(usd) = usage.get("cost").and_then(|item| item.as_f64())
+        && usd.is_finite()
+        && usd >= 0.0
+    {
+        // OpenCode reports dollars rather than provider-specific ticks.
+        accum.cost_usd_ticks = Some((usd * TICKS_PER_USD).round() as u64);
     }
 }
 
@@ -535,13 +551,11 @@ pub(crate) async fn stream_chat(
         // Same id for every round of this run, so a provider that caches
         // by conversation can keep the prefix on one server. A header
         // the spec does not name is not sent.
-        if let (Some(name), Some(id)) = (spec.cache_conversation_header, conversation_id) {
-            let id = id.trim();
-            if !id.is_empty()
-                && let Ok(value) = reqwest::header::HeaderValue::from_str(id)
-            {
-                request = request.header(name, value);
-            }
+        if let (Some(name), Some(id)) = (spec.cache_conversation_header, conversation_id)
+            && let Some(value) = conversation_header_value(spec, id)
+            && let Ok(value) = reqwest::header::HeaderValue::from_str(&value)
+        {
+            request = request.header(name, value);
         }
         let response = match request
             .json(body)
@@ -712,7 +726,7 @@ fn clip(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{reflection, xai};
+    use super::super::{opencode, reflection, xai};
     use super::*;
 
     fn message(
@@ -834,7 +848,47 @@ mod tests {
             let encoded = body.to_string();
             assert!(!encoded.contains("XAI_API_KEY"));
             assert!(!encoded.contains("REFLECTION_API_KEY"));
+            assert!(!encoded.contains("OPENCODE_API_KEY"));
         }
+    }
+
+    #[test]
+    fn opencode_requests_strip_the_selector_prefix_and_use_its_session_shape() {
+        let body = request_body(
+            &opencode::SPEC,
+            "opencode/grok-4.7",
+            &[message("user", "hello", vec![], None)],
+            &[],
+            "xhigh",
+        );
+        assert_eq!(body["model"], "grok-4.7");
+        assert!(body.get("reasoning_effort").is_none());
+        assert_eq!(
+            conversation_header_value(&opencode::SPEC, " run-7-123 "),
+            Some("ses_run-7-123".to_string())
+        );
+        assert_eq!(
+            conversation_header_value(&xai::SPEC, "run-7-123"),
+            Some("run-7-123".to_string())
+        );
+        assert_eq!(conversation_header_value(&opencode::SPEC, "  "), None);
+        assert_eq!(
+            opencode::SPEC.request_headers,
+            [("User-Agent", "llm-rnd-harness/0.1.0")]
+        );
+    }
+
+    #[test]
+    fn opencode_usage_cost_in_dollars_is_recorded() {
+        let mut accum = Accum::default();
+        push_sse_line(
+            "opencode",
+            &mut accum,
+            r#"data: {"model":"kimi-k3","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":3,"cost":0.00412}}"#,
+        );
+        let done = accum.finish();
+        assert_eq!(done.cost_usd_ticks, Some(41_200_000));
+        assert!((ticks_to_usd(done.cost_usd_ticks.unwrap()) - 0.00412).abs() < 1e-9);
     }
 
     #[test]

@@ -2,7 +2,7 @@
 //! shares with the other OpenAI-style providers lives in
 //! `providers::chat_completions`; only this declaration is Reflection's.
 
-use super::{ProviderSpec, Transport};
+use super::{CatalogFormat, ProviderSpec, Transport};
 
 /// The API-key variable, also listed in `providers::KEY_ENV_VARS`.
 pub(crate) const KEY_ENV: &str = "REFLECTION_API_KEY";
@@ -18,6 +18,9 @@ pub(crate) const SPEC: ProviderSpec = ProviderSpec {
     host: "https://api.reflection.ai",
     chat_url: Some("https://api.reflection.ai/openai/v1/chat/completions"),
     models: MODELS,
+    selector_prefix: None,
+    conversation_id_prefix: None,
+    catalog_format: CatalogFormat::OpenAI,
     key_env: Some(KEY_ENV),
     cloud: true,
     // The pre-registry behavior was mixed: the request always carried

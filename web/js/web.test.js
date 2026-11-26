@@ -808,6 +808,8 @@ const showWeb = id => sandbox.showApprovalModal({
     assert.match(page, />xAI <span class="provider-url">/);
     assert.match(page, /href="https:\/\/platform\.reflection\.ai\/billing"/);
     assert.match(page, />Reflection <span class="provider-url">/);
+    assert.match(page, /href="https:\/\/opencode\.ai\/console"/);
+    assert.match(page, />OpenCode <span class="provider-url">/);
     assert.equal(page.includes(' · <span class="provider-url">'), false, 'the middle dot is gone from the provider lines');
     assert.equal(page.includes('add Ollama Pro credits'), false);
     assert.equal(page.includes('add Grok credits'), false);

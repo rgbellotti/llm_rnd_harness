@@ -12,11 +12,12 @@
 //! dynamically from the installed models at serve time. A spec's static
 //! `models` list is the fallback the harness knows in advance: a
 //! successful live fetch replaces the offered list with the provider's
-//! current one, renames included; any failure leaves the static list
-//! in place.
+//! current usable list, renames included; any failure leaves the static
+//! list in place.
 
 pub(crate) mod chat_completions;
 pub(crate) mod ollama;
+pub(crate) mod opencode;
 pub(crate) mod reflection;
 pub(crate) mod xai;
 
@@ -31,10 +32,22 @@ pub(crate) enum Transport {
     ChatCompletions,
 }
 
+/// How a provider's `/models` response is parsed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CatalogFormat {
+    /// OpenAI's `{ "data": [{ "id": ... }] }` list.
+    OpenAI,
+    /// OpenAI's list plus OpenCode's chat/tool/modality/limit metadata.
+    OpenCode,
+    /// Ollama's daemon cloud catalog.
+    OllamaCloud,
+}
+
 /// One provider entry in [`REGISTRY`].
 pub(crate) struct ProviderSpec {
-    /// Registry id: "Ollama", "xAI", "Reflection". Stable across display
-    /// renames; the id is what `by_id` and history lookups key on.
+    /// Registry id: "Ollama", "xAI", "Reflection", "OpenCode". Stable
+    /// across display renames; the id is what `by_id` and history lookups
+    /// key on.
     pub id: &'static str,
     /// Sentence-case name for operator-facing text ("Grok", "Reflection").
     pub display: &'static str,
@@ -54,6 +67,15 @@ pub(crate) struct ProviderSpec {
     /// published cloud catalog; its local models are discovered at
     /// serve time.
     pub models: &'static [&'static str],
+    /// Prefix added to selector/display names but stripped before an API
+    /// request. Gateways whose ids overlap another provider use this to
+    /// keep routing unambiguous (`opencode/<id>`).
+    pub selector_prefix: Option<&'static str>,
+    /// Prefix added to the stable conversation id sent in
+    /// `cache_conversation_header`. OpenCode expects `ses_...`.
+    pub conversation_id_prefix: Option<&'static str>,
+    /// Shape and filtering rules for the live model-list response.
+    pub catalog_format: CatalogFormat,
     /// The environment / harness-keys variable holding this provider's
     /// API key. `None` when the provider needs no key.
     pub key_env: Option<&'static str>,
@@ -77,13 +99,15 @@ pub(crate) struct ProviderSpec {
     /// conversation containing an image with HTTP 400. For Ollama the
     /// provider-level value is true; the per-model answer comes from the
     /// daemon's `vision` capability (see
-    /// [`crate::models::model_accepts_images`]).
+    /// [`crate::models::model_accepts_images`]). Live per-model metadata
+    /// takes precedence when the catalog reports input modalities.
     pub supports_images: bool,
     /// The provider's published context window for this spec's models, in
     /// tokens, when every model in the catalog shares one figure. Used by
     /// the context-budget monitor; the pre-run guide dialog covers specs
-    /// and models without a published figure. Ollama is `None` here: its
-    /// live window is per-model `num_ctx`, read from `/api/show`.
+    /// and models without a published figure. Live per-model metadata
+    /// takes precedence. Ollama is `None` here: its live window is
+    /// per-model `num_ctx`, read from `/api/show`.
     pub context_window: Option<u64>,
     /// Where the provider's live model catalog comes from, fetched once at
     /// startup, best-effort. An absolute URL for Chat Completions specs
@@ -96,10 +120,10 @@ pub(crate) struct ProviderSpec {
     /// Which transport adapter serves this provider.
     pub transport: Transport,
     /// HTTP header that pins this run's requests to one cache server.
-    /// The value is the run id. xAI Chat Completions uses
-    /// `x-grok-conv-id` (docs, 2026-03). Reflection's prompt-cache
-    /// fields do not change caching. Ollama has no such header; it
-    /// reuses a stable prefix in the daemon.
+    /// The value is the run id with `conversation_id_prefix` applied.
+    /// xAI Chat Completions uses `x-grok-conv-id` (docs, 2026-03).
+    /// Reflection's prompt-cache fields do not change caching. Ollama has
+    /// no such header; it reuses a stable prefix in the daemon.
     pub cache_conversation_header: Option<&'static str>,
     /// Static headers sent on every chat request. Reflection accepts
     /// `Reflection-Missing-Reasoning-Strategy: auto` so an assistant
@@ -110,7 +134,12 @@ pub(crate) struct ProviderSpec {
 
 /// Every provider, in selector order. Ollama first: it is the default
 /// path and the group list starts with its two groups.
-pub(crate) const REGISTRY: &[ProviderSpec] = &[ollama::SPEC, xai::SPEC, reflection::SPEC];
+pub(crate) const REGISTRY: &[ProviderSpec] = &[
+    ollama::SPEC,
+    xai::SPEC,
+    reflection::SPEC,
+    opencode::SPEC,
+];
 
 /// The provider registered under `id`.
 pub(crate) fn by_id(id: &str) -> Option<&'static ProviderSpec> {
@@ -122,6 +151,16 @@ pub(crate) fn by_id(id: &str) -> Option<&'static ProviderSpec> {
 /// outside the Chat Completions catalogs is served by Ollama, whose
 /// local models are only known at serve time.
 pub(crate) fn for_model(name: &str) -> &'static ProviderSpec {
+    // A selector prefix is provider identity, independent of today's live
+    // catalog. Validation still decides whether the name may be selected.
+    for spec in REGISTRY {
+        if spec
+            .selector_prefix
+            .is_some_and(|prefix| name.starts_with(prefix))
+        {
+            return spec;
+        }
+    }
     for spec in REGISTRY {
         if matches!(spec.transport, Transport::ChatCompletions) && catalog_contains(spec, name) {
             return spec;
@@ -134,14 +173,43 @@ pub(crate) fn for_model(name: &str) -> &'static ProviderSpec {
 /// entry means the fetch did not run or failed: every reader then uses
 /// the spec's static catalog. A fetch that parses to nothing is a
 /// failure and never replaces the static list.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct LiveCatalog {
+    /// Raw upstream ids, without the selector prefix.
+    pub models: Vec<String>,
+    /// Per-model facts keyed by the same raw upstream id.
+    pub metadata: std::collections::HashMap<String, ModelMetadata>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ModelMetadata {
+    pub context_window: Option<u64>,
+    /// `None` means the catalog did not report modalities; the spec's
+    /// conservative provider default then applies.
+    pub supports_images: Option<bool>,
+}
+
 static LIVE_CATALOGS: std::sync::LazyLock<
-    std::sync::RwLock<std::collections::HashMap<&'static str, Vec<String>>>,
+    std::sync::RwLock<std::collections::HashMap<&'static str, LiveCatalog>>,
 > = std::sync::LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
 
-/// Record the live catalog for `id`. Called once per launch, at startup.
+/// Record a live catalog with no extra metadata. Existing providers and
+/// tests use this form; OpenCode supplies metadata through the companion
+/// setter below.
+#[cfg(test)]
 pub(crate) fn set_live_catalog(id: &'static str, models: Vec<String>) {
+    set_live_catalog_with_metadata(
+        id,
+        LiveCatalog {
+            models,
+            metadata: std::collections::HashMap::new(),
+        },
+    );
+}
+
+pub(crate) fn set_live_catalog_with_metadata(id: &'static str, catalog: LiveCatalog) {
     if let Ok(mut map) = LIVE_CATALOGS.write() {
-        map.insert(id, models);
+        map.insert(id, catalog);
     }
 }
 
@@ -153,21 +221,72 @@ pub(crate) fn clear_live_catalogs() {
     }
 }
 
+/// The selector/display name for an upstream model id.
+pub(crate) fn selector_name(spec: &ProviderSpec, model: &str) -> String {
+    if let Some(prefix) = spec.selector_prefix
+        && !model.starts_with(prefix)
+    {
+        format!("{prefix}{model}")
+    } else {
+        model.to_string()
+    }
+}
+
+/// The id sent to the provider API for a selector/display name.
+pub(crate) fn upstream_model_name<'a>(spec: &ProviderSpec, model: &'a str) -> &'a str {
+    spec.selector_prefix
+        .and_then(|prefix| model.strip_prefix(prefix))
+        .unwrap_or(model)
+}
+
 /// The model names offered for `spec`: the live catalog when startup
 /// fetched one — the provider's current list, renames included — else
 /// the spec's static catalog, the list the harness knows in advance.
 pub(crate) fn catalog(spec: &ProviderSpec) -> Vec<String> {
-    if let Ok(map) = LIVE_CATALOGS.read()
-        && let Some(models) = map.get(spec.id)
+    let raw = if let Ok(map) = LIVE_CATALOGS.read()
+        && let Some(catalog) = map.get(spec.id)
     {
-        return models.clone();
-    }
-    spec.models.iter().map(|model| model.to_string()).collect()
+        catalog.models.clone()
+    } else {
+        spec.models.iter().map(|model| model.to_string()).collect()
+    };
+    raw.into_iter()
+        .map(|model| selector_name(spec, &model))
+        .filter(|model| crate::config::is_safe_model_name(model))
+        .collect()
 }
 
 /// True when `name` is offered under `spec`'s catalog (live or static).
 pub(crate) fn catalog_contains(spec: &ProviderSpec, name: &str) -> bool {
     catalog(spec).iter().any(|model| model == name)
+}
+
+/// Live metadata for one selected model, when the catalog supplied it.
+pub(crate) fn model_metadata(spec: &ProviderSpec, name: &str) -> Option<ModelMetadata> {
+    let raw = upstream_model_name(spec, name);
+    LIVE_CATALOGS
+        .read()
+        .ok()?
+        .get(spec.id)?
+        .metadata
+        .get(raw)
+        .cloned()
+}
+
+/// The selected model's published context window, falling back to the
+/// provider-wide figure only when the catalog has no per-model value.
+pub(crate) fn model_context_window(spec: &ProviderSpec, name: &str) -> Option<u64> {
+    model_metadata(spec, name)
+        .and_then(|metadata| metadata.context_window)
+        .or(spec.context_window)
+}
+
+/// The selected model's image support. A catalog that reported text-only
+/// modalities is authoritative; missing metadata uses the spec default.
+pub(crate) fn model_supports_images(spec: &ProviderSpec, name: &str) -> bool {
+    model_metadata(spec, name)
+        .and_then(|metadata| metadata.supports_images)
+        .unwrap_or(spec.supports_images)
 }
 
 /// Upper bound on a fetched catalog. A provider listing more than this is
@@ -201,6 +320,77 @@ pub(crate) fn parse_openai_models(body: &str) -> Vec<String> {
         }
     }
     names
+}
+
+/// Parse OpenCode Console's OpenAI-shaped list, retaining only paid chat
+/// models that advertise tool support. Free-tier chat models are available
+/// only inside OpenCode and return 403 to external harnesses.
+pub(crate) fn parse_opencode_catalog(body: &str) -> LiveCatalog {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
+        return LiveCatalog::default();
+    };
+    let Some(data) = value.get("data").and_then(|item| item.as_array()) else {
+        return LiveCatalog::default();
+    };
+    let mut catalog = LiveCatalog::default();
+    for entry in data {
+        if entry.get("type").and_then(|item| item.as_str()) != Some("chat")
+            || entry.pointer("/capabilities/tools/supported").and_then(|item| item.as_bool())
+                != Some(true)
+        {
+            continue;
+        }
+        let Some(id) = entry.get("id").and_then(|item| item.as_str()) else {
+            continue;
+        };
+        if !crate::config::is_safe_model_name(id)
+            || !crate::config::is_safe_model_name(&selector_name(&opencode::SPEC, id))
+            || opencode_model_is_free(entry)
+        {
+            continue;
+        }
+        if catalog.models.iter().any(|known| known == id) {
+            continue;
+        }
+        let context_window = entry
+            .pointer("/limit/context")
+            .and_then(|item| item.as_u64())
+            .filter(|tokens| *tokens > 0);
+        let supports_images = entry
+            .pointer("/modalities/input")
+            .and_then(|item| item.as_array())
+            .map(|items| {
+                items.iter().any(|item| {
+                    item.as_str()
+                        .is_some_and(|media| media.starts_with("image/"))
+                })
+            });
+        catalog.metadata.insert(
+            id.to_string(),
+            ModelMetadata {
+                context_window,
+                supports_images,
+            },
+        );
+        catalog.models.push(id.to_string());
+        if catalog.models.len() >= MAX_CATALOG_MODELS {
+            break;
+        }
+    }
+    catalog
+}
+
+fn opencode_model_is_free(entry: &serde_json::Value) -> bool {
+    if entry
+        .get("id")
+        .and_then(|item| item.as_str())
+        .is_some_and(|id| id.to_ascii_lowercase().ends_with("-free"))
+    {
+        return true;
+    }
+    let input = entry.pointer("/cost/text/input/price").and_then(|v| v.as_f64());
+    let output = entry.pointer("/cost/text/output/price").and_then(|v| v.as_f64());
+    matches!((input, output), (Some(0.0), Some(0.0)))
 }
 
 /// Parse a daemon cloud-catalog body (`{"models":[{"name":...}]}`) into
@@ -267,7 +457,7 @@ fn catalog_client() -> &'static reqwest::Client {
 pub(crate) async fn fetch_live_catalog(
     spec: &ProviderSpec,
     daemon_url: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<LiveCatalog, String> {
     let Some(endpoint) = spec.models_endpoint else {
         return Err("this provider declares no model-list endpoint".into());
     };
@@ -290,11 +480,14 @@ pub(crate) async fn fetch_live_catalog(
                 .text()
                 .await
                 .map_err(|error| format!("response unreadable: {error}"))?;
-            let names = parse_ollama_cloud_models(&body);
-            return if names.is_empty() {
+            let models = parse_ollama_cloud_models(&body);
+            return if models.is_empty() {
                 Err("the daemon listed no cloud models (not signed in?)".into())
             } else {
-                Ok(names)
+                Ok(LiveCatalog {
+                    models,
+                    metadata: std::collections::HashMap::new(),
+                })
             };
         }
         Transport::ChatCompletions => {
@@ -319,20 +512,27 @@ pub(crate) async fn fetch_live_catalog(
                 .map_err(|error| format!("response unreadable: {error}"))?
         }
     };
-    let names = parse_openai_models(&body);
-    if names.is_empty() {
-        return Err("the provider listed no models".into());
+    let catalog = match spec.catalog_format {
+        CatalogFormat::OpenAI => LiveCatalog {
+            models: parse_openai_models(&body),
+            metadata: std::collections::HashMap::new(),
+        },
+        CatalogFormat::OpenCode => parse_opencode_catalog(&body),
+        CatalogFormat::OllamaCloud => unreachable!("Ollama cloud catalogs return above"),
+    };
+    if catalog.models.is_empty() {
+        return Err("the provider listed no usable models".into());
     }
-    Ok(names)
+    Ok(catalog)
 }
 
 /// Every provider API-key variable name. One list: `keys.rs` parses
 /// exactly these from the harness-keys file, and every environment-scrub
 /// site — the `harden.rs` re-exec scan and the `capture.rs` tool-child
 /// scrub — derives from it through [`is_secret_var`] /
-/// [`secret_env_vars`]. Adding provider number four means its key name
-/// appears here once; no scrub list can miss it.
-pub(crate) const KEY_ENV_VARS: &[&str] = &[xai::KEY_ENV, reflection::KEY_ENV];
+/// [`secret_env_vars`]. Adding a provider means its key name appears here
+/// once; no scrub list can miss it.
+pub(crate) const KEY_ENV_VARS: &[&str] = &[xai::KEY_ENV, reflection::KEY_ENV, opencode::KEY_ENV];
 
 /// True when `name` is a secret variable the harness must keep out of
 /// child processes and `/proc/<pid>/environ`. The history passphrase is
@@ -384,10 +584,11 @@ mod tests {
 
     #[test]
     fn every_spec_is_registered_once_and_reachable_by_id() {
-        assert_eq!(REGISTRY.len(), 3);
+        assert_eq!(REGISTRY.len(), 4);
         assert!(by_id("Ollama").is_some());
         assert!(by_id("xAI").is_some());
         assert!(by_id("Reflection").is_some());
+        assert!(by_id("OpenCode").is_some());
         assert!(by_id("xAI").unwrap().id == "xAI");
         let ids: Vec<&str> = REGISTRY.iter().map(|spec| spec.id).collect();
         for (index, id) in ids.iter().enumerate() {
@@ -403,6 +604,7 @@ mod tests {
         assert!(ollama::SPEC.supports_images);
         assert!(xai::SPEC.supports_images);
         assert!(!reflection::SPEC.supports_images);
+        assert!(!opencode::SPEC.supports_images);
     }
 
     #[tokio::test]
@@ -430,6 +632,8 @@ mod tests {
     fn for_model_resolves_catalogs_and_defaults_to_ollama() {
         assert_eq!(for_model("grok-4.7").id, "xAI");
         assert_eq!(for_model("grok-4.5").id, "xAI");
+        assert_eq!(for_model("opencode/grok-4.7").id, "OpenCode");
+        assert_eq!(for_model("opencode/kimi-k3").id, "OpenCode");
         assert_eq!(for_model("Beam-1.0-501B-A23B").id, "Reflection");
         assert_eq!(for_model("gemma4:31b-cloud").id, "Ollama");
         assert_eq!(for_model("lfm2.5:8b").id, "Ollama");
@@ -440,11 +644,12 @@ mod tests {
     fn catalogs_do_not_overlap_between_providers() {
         for spec in REGISTRY {
             for model in spec.models {
+                let selected = selector_name(spec, model);
                 for other in REGISTRY {
                     if other.id != spec.id {
                         assert!(
-                            !other.models.contains(model),
-                            "{model} is listed by both {} and {}",
+                            !other.models.iter().any(|raw| selector_name(other, raw) == selected),
+                            "{selected} is listed by both {} and {}",
                             spec.id,
                             other.id
                         );
@@ -466,10 +671,14 @@ mod tests {
         }
         assert!(is_secret_var("XAI_API_KEY"));
         assert!(is_secret_var("REFLECTION_API_KEY"));
+        assert!(is_secret_var("OPENCODE_API_KEY"));
         assert!(is_secret_var("HARNESS_DB_KEY"));
         assert!(!is_secret_var("HARNESS_HANDOFF_FD"));
         let all: Vec<&str> = secret_env_vars().collect();
-        assert_eq!(all, ["XAI_API_KEY", "REFLECTION_API_KEY", "HARNESS_DB_KEY"]);
+        assert_eq!(
+            all,
+            ["XAI_API_KEY", "REFLECTION_API_KEY", "OPENCODE_API_KEY", "HARNESS_DB_KEY"]
+        );
     }
 
     #[test]
@@ -483,6 +692,12 @@ mod tests {
         );
         assert!(ollama::SPEC.cache_conversation_header.is_none());
         assert!(ollama::SPEC.request_headers.is_empty());
+        assert_eq!(opencode::SPEC.cache_conversation_header, Some("x-opencode-session"));
+        assert_eq!(opencode::SPEC.conversation_id_prefix, Some("ses_"));
+        assert_eq!(
+            opencode::SPEC.request_headers,
+            [("User-Agent", "llm-rnd-harness/0.1.0")]
+        );
     }
 
     #[test]
@@ -492,6 +707,7 @@ mod tests {
         assert_eq!(xai::SPEC.context_window, Some(500_000));
         assert_eq!(reflection::SPEC.context_window, None);
         assert_eq!(ollama::SPEC.context_window, None);
+        assert_eq!(opencode::SPEC.context_window, None);
     }
 
     #[test]
@@ -505,6 +721,10 @@ mod tests {
             Some("https://api.reflection.ai/openai/v1/models")
         );
         assert_eq!(ollama::SPEC.models_endpoint.as_deref(), Some("/api/v1/models/cloud"));
+        assert_eq!(
+            opencode::SPEC.models_endpoint.as_deref(),
+            Some("https://opencode.ai/inference/v1/models")
+        );
     }
 
     #[test]
@@ -522,6 +742,96 @@ mod tests {
         );
         assert!(parse_openai_models("not json").is_empty());
         assert!(parse_openai_models(r#"{"data":{}}"#).is_empty());
+    }
+
+    #[test]
+    fn opencode_catalog_keeps_paid_tool_chat_models_and_metadata() {
+        let body = r#"{"object":"list","data":[
+            {"id":"grok-4.7","type":"chat","capabilities":{"tools":{"supported":true}},"modalities":{"input":["text","image/png"]},"limit":{"context":500000},"cost":{"text":{"input":{"price":2},"output":{"price":6}}}},
+            {"id":"glm-5.3","type":"chat","capabilities":{"tools":{"supported":true}},"modalities":{"input":["text"]},"limit":{"context":1000000},"cost":{"text":{"input":{"price":0.56},"output":{"price":1.76}}}},
+            {"id":"glm-5.3","type":"chat","capabilities":{"tools":{"supported":true}}},
+            {"id":"embed-5","type":"embedding","capabilities":{"tools":{"supported":true}}},
+            {"id":"no-tools","type":"chat","capabilities":{"tools":{"supported":false}}},
+            {"id":"missing-tools","type":"chat"},
+            {"id":"beam-free","type":"chat","capabilities":{"tools":{"supported":true}},"cost":{"text":{"input":{"price":0},"output":{"price":0}}}},
+            {"id":"stealth-free","type":"chat","capabilities":{"tools":{"supported":true}},"cost":{"text":{"input":{"price":0},"output":{"price":0}}}},
+            {"id":"bad'name","type":"chat","capabilities":{"tools":{"supported":true}}}
+        ]}"#;
+        let catalog = parse_opencode_catalog(body);
+        assert_eq!(catalog.models, ["grok-4.7", "glm-5.3"]);
+        let grok = catalog.metadata.get("grok-4.7").unwrap();
+        assert_eq!(grok.context_window, Some(500_000));
+        assert_eq!(grok.supports_images, Some(true));
+        let glm = catalog.metadata.get("glm-5.3").unwrap();
+        assert_eq!(glm.context_window, Some(1_000_000));
+        assert_eq!(glm.supports_images, Some(false));
+        assert!(parse_opencode_catalog("not json").models.is_empty());
+        assert!(parse_opencode_catalog(r#"{"data":{}}"#).models.is_empty());
+    }
+
+    #[test]
+    fn opencode_selector_names_are_namespaced_and_round_trip() {
+        assert_eq!(selector_name(&opencode::SPEC, "grok-4.7"), "opencode/grok-4.7");
+        assert_eq!(selector_name(&opencode::SPEC, "opencode/grok-4.7"), "opencode/grok-4.7");
+        assert_eq!(upstream_model_name(&opencode::SPEC, "opencode/grok-4.7"), "grok-4.7");
+        assert_eq!(upstream_model_name(&xai::SPEC, "grok-4.7"), "grok-4.7");
+        assert!(crate::config::is_safe_model_name("opencode/grok-4.7"));
+    }
+
+    #[tokio::test]
+    async fn opencode_live_metadata_drives_context_and_image_resolution() {
+        clear_live_catalogs();
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert(
+            "grok-4.7".to_string(),
+            ModelMetadata {
+                context_window: Some(500_000),
+                supports_images: Some(true),
+            },
+        );
+        metadata.insert(
+            "glm-5.3".to_string(),
+            ModelMetadata {
+                context_window: Some(1_000_000),
+                supports_images: Some(false),
+            },
+        );
+        set_live_catalog_with_metadata(
+            opencode::SPEC.id,
+            LiveCatalog {
+                models: vec!["grok-4.7".into(), "glm-5.3".into()],
+                metadata,
+            },
+        );
+        assert_eq!(catalog(&opencode::SPEC), ["opencode/grok-4.7", "opencode/glm-5.3"]);
+        assert_eq!(for_model("opencode/grok-4.7").id, "OpenCode");
+        assert_eq!(for_model("grok-4.7").id, "xAI");
+        assert_eq!(model_context_window(&opencode::SPEC, "opencode/grok-4.7"), Some(500_000));
+        assert!(model_supports_images(&opencode::SPEC, "opencode/grok-4.7"));
+        assert!(!model_supports_images(&opencode::SPEC, "opencode/glm-5.3"));
+        let ollama = ollama_rs::Ollama::builder()
+            .host("http://127.0.0.1")
+            .port(1)
+            .build();
+        assert_eq!(
+            crate::models::provider_context_window(&ollama, "opencode/grok-4.7").await,
+            Some(500_000)
+        );
+        assert_eq!(
+            crate::models::model_accepts_images(&ollama, "opencode/grok-4.7").await,
+            Some(true)
+        );
+        assert_eq!(
+            crate::models::model_accepts_images(&ollama, "opencode/glm-5.3").await,
+            Some(false)
+        );
+        let json = crate::config::model_groups_json(&crate::config::InstalledModels::default());
+        assert!(json.contains("opencode/grok-4.7"), "{json}");
+        clear_live_catalogs();
+        // The static fallback remains namespaced and conservative.
+        assert!(catalog_contains(&opencode::SPEC, "opencode/kimi-k3"));
+        assert_eq!(model_context_window(&opencode::SPEC, "opencode/kimi-k3"), None);
+        assert!(!model_supports_images(&opencode::SPEC, "opencode/kimi-k3"));
     }
 
     #[test]

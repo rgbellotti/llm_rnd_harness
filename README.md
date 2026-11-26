@@ -6,9 +6,9 @@ commands (with your approval), its thinking and responses stream live into
 the browser, and every prompt/response chain is kept in tabbed sessions you
 can copy or export. Providers are first-class: the model selector is the
 provider list for a run — a local model through the local Ollama daemon
-(`ollama-rs`), a cloud model through the Ollama catalog, xAI, or Reflection —
-with the same approval and history path for each. Future compatible providers 
-will be added in later versions.
+(`ollama-rs`), a cloud model through the Ollama catalog, xAI, Reflection,
+or OpenCode Console — with the same approval and history path for each.
+Future compatible providers will be added in later versions.
 
 The majority of the README is generated, if anything is unclear contact
 me with a subject line involving LLM RND. Not verified for use in production,
@@ -38,6 +38,7 @@ your agent to derive from. More inference provider options will be added soon.
   the selector; a corpus still names its own embedding model.
 - For a Grok model: `XAI_API_KEY` from [console.x.ai](https://console.x.ai), stored in the encrypted `harness-keys` file. Models reached through Ollama do not use it. The page never sees the key. Prepaid credits are loaded in the xAI console; with the default invoiced-billing limit of $0, a request is rejected when the balance is gone. See **Keys**.
 - For a Reflection model: `REFLECTION_API_KEY` from [the Reflection console](https://platform.reflection.ai/), stored in the same encrypted `harness-keys` file. It is optional: without it, Reflection models stay in the model selector and refuse to run. The page never sees the key. See **Keys**.
+- For an OpenCode Console model: `OPENCODE_API_KEY` from [OpenCode Console](https://opencode.ai/console), stored in the same encrypted `harness-keys` file. Add prepaid credits in Console, create a personal or service-account API key, and select an `opencode/<model>` entry. Without the key, the fallback OpenCode models remain visible and refuse to run. The page never sees the key. See **Keys**.
 - Session history is a SQLCipher file at `$XDG_DATA_HOME/harness/harness.db`, or `~/.local/share/harness/harness.db` when `XDG_DATA_HOME` is unset. It is encrypted with `HARNESS_DB_KEY`, also stored in the keys file. Override the path with `HARNESS_DB_PATH` or `--history <path>`. With no passphrase anywhere, the harness still starts and history is session-only (in memory, nothing on disk). See **Keys**.
 - poppler-utils (`pdfinfo`/`pdftotext`) for `read_pdf` — optional; the tool
   reports a clear error if they are missing
@@ -68,8 +69,9 @@ session-only for that launch), `y` creates the encrypted keys file
 (see **Keys**). The tokenized URL opens in the default browser and is
 printed in the terminal. URL tokens are created per launch, and stale
 URL tokens will not send requests to inference APIs. Cloud models
-(GROK / REFLECTION / the OLLAMA catalog) need their provider API key
-stored in the keys file before they run.
+(GROK / REFLECTION / OPENCODE / the OLLAMA catalog) need their provider API
+key stored in the keys file before they run. The **credits** tab links to
+each provider's billing or Console page.
 
 ## Run it
 
@@ -79,17 +81,19 @@ cargo run
 
 The model can be switched at runtime from the page: click the model name in
 the "Model:" line to open the model selector (OLLAMA / LOCAL / GROK /
-REFLECTION). OLLAMA is
+REFLECTION / OPENCODE). OLLAMA is
 the published Ollama cloud catalog; those models run on a Pro plan or a
 pre-paid balance. LOCAL is the chat models installed in the local Ollama.
-GROK is the xAI list. REFLECTION is the Reflection list. The switch applies to the next run and is refused while a
-run is in flight; it resets to `DEFAULT_MODEL` (in `src/models.rs`) when the
-harness restarts.
+GROK is the xAI list. REFLECTION is the Reflection list. OPENCODE is the
+workspace-accessible OpenCode Console list, shown as `opencode/<model>` so
+ids that overlap direct providers remain unambiguous. The switch applies to
+the next run and is refused while a run is in flight; it resets to
+`DEFAULT_MODEL` (in `src/models.rs`) when the harness restarts.
 
 The lists are live where a live source exists. At startup the harness
 asks your Ollama daemon for its cloud catalog (a signed-in daemon
-answers; no key leaves the machine), and asks xAI and Reflection for
-their `/v1/models` lists using the keys already in `harness-keys`. When
+answers; no key leaves the machine), and asks xAI, Reflection, and OpenCode
+for their `/v1/models` lists using the keys already in `harness-keys`. When
 a provider's fetch succeeds, the menu shows that provider's current
 list — renames included. A provider's built-in list answers whenever
 the fetch fails — no key set, timeout, or odd response — so the menu
@@ -133,6 +137,17 @@ reasoning trace replayed on every earlier assistant message: a multi-round
 request without it is rejected with HTTP 400 (`missing_required_parameter`),
 so the harness always sends the trace back (`REPLAY_REASONING` in
 `src/reflection.rs`). The replay is billed as input tokens.
+
+OpenCode Console models use `https://opencode.ai/inference/openai/v1/chat/completions`.
+Console translates its paid text models onto this endpoint, so GPT, Claude,
+Grok, Gemini, and open models share the harness's existing approval flow.
+Requests send a stable `x-opencode-session: ses_<run-id>` header and an
+identifying `User-Agent`. The live catalog keeps only chat models that
+advertise tool support; free-tier chat models are omitted because Console
+returns HTTP 403 for them outside OpenCode. Per-model context windows and
+image input support come from the catalog. Reasoning uses the model's
+provider defaults rather than Grok's effort setting. OpenCode's reported
+`usage.cost` is shown in the existing cost metrics.
 
 **Context budget.** When the provider reports a context window, the harness
 tells the model the size of the latest prompt at 20%, 40%, 60%, 80%, 90%,
@@ -188,15 +203,17 @@ as small as possible.
 The token lives in the URL, so the browser history keeps it. Share the
 page with care, and start a new harness for a new session if the URL
 has been pasted somewhere. That token is only the page credential. It
-is not `XAI_API_KEY` and not `HARNESS_DB_KEY`.
+is not `XAI_API_KEY`, `REFLECTION_API_KEY`, `OPENCODE_API_KEY`, or
+`HARNESS_DB_KEY`.
 
 ## Keys
 
-`XAI_API_KEY` and `HARNESS_DB_KEY` stay in the harness process. They are
-not the per-launch page token (`?t=`), and they are not the comment tag
-the page uses to mark a note. The page token is printed so you can open
-the page. The other two are not printed, not sent to the page, and not
-stored in the database or the repository.
+`XAI_API_KEY`, `REFLECTION_API_KEY`, `OPENCODE_API_KEY`, and
+`HARNESS_DB_KEY` stay in the harness process. They are not the per-launch
+page token (`?t=`), and they are not the comment tag the page uses to mark
+a note. The page token is printed so you can open the page. The secrets
+are not printed, not sent to the page, and not stored in the database or
+the repository.
 
 **`XAI_API_KEY`** is the bearer token for `https://api.x.ai/v1`. Grok
 models need it. Models reached through Ollama do not. Calls to xAI still
@@ -208,6 +225,16 @@ for the key. The harness does not substitute another provider.
 optional: Reflection models need it, and a missing key leaves them in the
 model selector refusing to run, the same way Grok behaves without its key.
 The harness does not substitute another provider.
+
+**`OPENCODE_API_KEY`** is a Console API key for
+`https://opencode.ai/inference`. Create one under **Account → Personal API
+keys** in [OpenCode Console](https://opencode.ai/console), choose the
+workspace, and add credits under **Settings → Billing** for pay-as-you-go
+use. Service-account keys also work when they have model-read/inference
+access. OpenCode models need this key; without it they stay in the selector
+and refuse to run. Calls go only to OpenCode's inference gateway, which
+routes them to the selected model's provider. The key never reaches the
+page or a tool process.
 
 **`HARNESS_DB_KEY`** is the passphrase for the history file
 (`$XDG_DATA_HOME/harness/harness.db`, or `~/.local/share/harness/harness.db`).
@@ -244,11 +271,12 @@ Type `set_key` to add, update, or remove one secret: the current
 password, then a variable name, then the value (typed hidden). The file
 re-encrypts with the same password and the harness continues with the
 new value. The variable names are the harness's own secret list —
-`XAI_API_KEY`, `REFLECTION_API_KEY`, and `HARNESS_DB_KEY` today — and a
-provider registered later joins that list automatically. An empty value
-removes a provider key. The history passphrase cannot be removed, only
-replaced, and the flow warns that an existing history file will not open
-under a replacement passphrase. `set_key` is reserved too. This is the
+`XAI_API_KEY`, `REFLECTION_API_KEY`, `OPENCODE_API_KEY`, and
+`HARNESS_DB_KEY` today — and a provider registered later joins that list
+automatically. An empty value removes a provider key. The history
+passphrase cannot be removed, only replaced, and the flow warns that an
+existing history file will not open under a replacement passphrase.
+`set_key` is reserved too. This is the
 supported way to put a new provider's key into the file: no script, no
 plain-text edit, and the same crash-safe commit the first-launch
 encryption uses.
@@ -304,11 +332,11 @@ The first start that finds a plain-text file asks you to choose that
 password, encrypts the file, and overwrites the plain text. Do not
 source the file. After it is encrypted, sourcing it does not load the
 keys. The harness reads the file itself. An approved shell command, a
-PDF read, the web tool, and a custom tool are started without
-`XAI_API_KEY` and `HARNESS_DB_KEY`.
+PDF read, the web tool, and a custom tool are started without any provider
+API key or `HARNESS_DB_KEY`.
 
 If the file is absent (a plain start, or no home to put it in), the
-harness still accepts the two variables from
+harness still accepts the provider keys and history passphrase from
 the environment of the process that starts it. Removing them from the
 process environment is not enough: Linux keeps the starting environment
 at `/proc/<pid>/environ`, and a same-user shell command can read that
@@ -340,6 +368,7 @@ install -m 600 /dev/null "$HOME/.config/harness-keys"
 ```sh
 XAI_API_KEY='paste-the-key-from-console.x.ai'
 REFLECTION_API_KEY='paste-the-key-from-the-reflection-console'   # optional
+OPENCODE_API_KEY='paste-the-key-from-opencode-console'          # optional
 HARNESS_DB_KEY='a long passphrase that is not the api key'
 ```
 

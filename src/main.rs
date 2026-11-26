@@ -262,17 +262,17 @@ async fn async_main() {
     }
     // Live model catalogs, once per launch, best-effort: each spec that
     // declares an endpoint is fetched (the Ollama daemon's cloud list
-    // needs no key; xAI and Reflection use the keys already loaded), and
+    // needs no key; cloud providers use the keys already loaded), and
     // any failure leaves that spec's built-in list in place. The fetch
     // sends no prompts.
     for spec in providers::REGISTRY {
         match providers::fetch_live_catalog(spec, &ollama.url_str()).await {
-            Ok(models) => {
-                providers::set_live_catalog(spec.id, models.clone());
+            Ok(catalog) => {
+                let count = catalog.models.len();
+                providers::set_live_catalog_with_metadata(spec.id, catalog);
                 println!(
                     "{}: live model catalog fetched ({} models)",
-                    spec.display,
-                    models.len()
+                    spec.display, count
                 );
             }
             Err(reason) => {

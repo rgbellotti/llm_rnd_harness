@@ -1,6 +1,6 @@
-//! Encrypted store for `XAI_API_KEY`, `REFLECTION_API_KEY`, and
-//! `HARNESS_DB_KEY`. `REFLECTION_API_KEY` is optional: without it, Reflection
-//! models stay out of the model selector's usable set.
+//! Encrypted store for `XAI_API_KEY`, `REFLECTION_API_KEY`,
+//! `OPENCODE_API_KEY`, and `HARNESS_DB_KEY`. Provider keys are optional:
+//! without one, that provider's models stay visible but refuse to run.
 //!
 //! The file is `~/.config/harness-keys`, or `$XDG_CONFIG_HOME/harness-keys`,
 //! or the path in `HARNESS_KEYS_FILE`. It lives off the workspace volume.
@@ -1723,17 +1723,17 @@ HARNESS_DB_KEY='history test key'\n"
     #[test]
     fn onboarding_yes_creates_an_encrypted_file_with_the_offered_and_skipped_keys() {
         // The wizard imports from the real process environment, so clear
-        // the three names first: the test then sees the generated and
-        // offered path on any machine, whatever the launching shell had
+        // the three provider names first: the test then sees the generated
+        // and offered path on any machine, whatever the launching shell had
         // exported. SAFETY: tests only; no other test reads these names
         // (the history test build uses its fixed fallback passphrase).
-        for name in ["XAI_API_KEY", "REFLECTION_API_KEY", "HARNESS_DB_KEY"] {
+        for name in ["XAI_API_KEY", "REFLECTION_API_KEY", "OPENCODE_API_KEY", "HARNESS_DB_KEY"] {
             unsafe { std::env::remove_var(name) };
         }
         let temp = TempKeys::new();
         let path = temp.path();
-        // y, password, confirm, XAI value, REFLECTION skipped.
-        let mut script = Script::new(&["y", "temp", "temp", "xai-canary", ""]);
+        // y, password, confirm, XAI value, Reflection skipped, OpenCode skipped.
+        let mut script = Script::new(&["y", "temp", "temp", "xai-canary", "", ""]);
         let onboarded = match prompt_onboarding(&path, &mut script).unwrap() {
             Onboarding::Encrypt(secrets) => secrets,
             other => panic!("expected encryption, got {other:?}"),
@@ -1745,6 +1745,10 @@ HARNESS_DB_KEY='history test key'\n"
         assert!(
             !onboarded.provider_keys.contains_key("REFLECTION_API_KEY"),
             "an empty answer skips the slot"
+        );
+        assert!(
+            !onboarded.provider_keys.contains_key("OPENCODE_API_KEY"),
+            "an empty answer skips the OpenCode slot"
         );
         // The history passphrase was generated: 64 hex characters.
         assert_eq!(onboarded.db_key.len(), 64, "{}", onboarded.db_key);
@@ -1802,9 +1806,9 @@ HARNESS_DB_KEY='history test key'\n"
         let path = temp.path();
         write_sample(&path);
         seal_plaintext(&path, "temp").unwrap();
-        // The sample carries XAI only, so exactly one offer appears: the
-        // hidden value lands and the file reopens with it.
-        let mut script = Script::new(&["set_unreg_keys", "temp", "ref-key"]);
+        // The sample carries XAI only, so Reflection and OpenCode are
+        // offered in registry order; both hidden values land and reopen.
+        let mut script = Script::new(&["set_unreg_keys", "temp", "ref-key", "oc-key"]);
         let opened = run_session(&path, &mut script).unwrap();
         assert_eq!(
             opened.provider_keys.get("REFLECTION_API_KEY").map(String::as_str),
@@ -1819,11 +1823,19 @@ HARNESS_DB_KEY='history test key'\n"
             again.provider_keys.get("REFLECTION_API_KEY").map(String::as_str),
             Some("ref-key")
         );
+        assert_eq!(
+            opened.provider_keys.get("OPENCODE_API_KEY").map(String::as_str),
+            Some("oc-key")
+        );
+        assert_eq!(
+            again.provider_keys.get("OPENCODE_API_KEY").map(String::as_str),
+            Some("oc-key")
+        );
         // Everything already set: no offers, no re-encrypt, and the
         // session still continues into the harness.
         let mut script = Script::new(&["set_unreg_keys", "temp"]);
         let untouched = run_session(&path, &mut script).unwrap();
-        assert_eq!(untouched.provider_keys.len(), 2);
+        assert_eq!(untouched.provider_keys.len(), 3);
     }
 
     #[test]

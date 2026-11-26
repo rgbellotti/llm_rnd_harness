@@ -13,9 +13,9 @@
 //!   grandchild of `bash -c` does not outlive the tool call.
 //! - **No inherited stdin.** A tool can never consume the harness'
 //!   own terminal input.
-//! - **No secret environment.** `XAI_API_KEY`, `REFLECTION_API_KEY`,
-//!   `HARNESS_DB_KEY`, and the re-exec handoff descriptor are removed from
-//!   the child's environment.
+//! - **No secret environment.** Every provider API key, `HARNESS_DB_KEY`,
+//!   and the re-exec handoff descriptor are removed from the child's
+//!   environment.
 //!   The parent is non-dumpable, so the child also cannot read those
 //!   values back from `/proc/<pid>/environ` or `/proc/<pid>/mem`. Children
 //!   inherit the non-dumpable flag. `/proc/<pid>/stat` stays readable.

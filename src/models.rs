@@ -51,7 +51,7 @@ pub fn is_safe_model_name(name: &str) -> bool {
 }
 
 /// True when `name` is a cloud model: prompts and tool outputs leave this
-/// machine when it is selected. Every xAI and Reflection model, the
+/// machine when it is selected. Every registered cloud provider, the
 /// published Ollama catalog, and any installed tag that ends in `:cloud`
 /// count. A local chat model does not.
 pub fn is_cloud_model(name: &str) -> bool {
@@ -299,13 +299,19 @@ fn context_window_cache() -> &'static std::sync::Mutex<HashMap<String, Option<u6
 /// The context window the budget monitor uses for `name`, or `None` when
 /// no figure is known.
 ///
-/// A Chat Completions provider's window comes from its spec (the xAI
-/// table entry). An Ollama model uses the live `num_ctx` from its
-/// `/api/show` parameters, cached for this launch. A missing value stays
-/// missing until restart; the run then falls back to a typed guide.
+/// A Chat Completions provider's window comes from live per-model metadata
+/// when its catalog supplies it, otherwise from the provider spec. An
+/// Ollama model uses the live `num_ctx` from its `/api/show` parameters,
+/// cached for this launch. A missing value stays missing until restart;
+/// the run then falls back to a typed guide.
 pub(crate) async fn provider_context_window(ollama: &Ollama, name: &str) -> Option<u64> {
-    if let Some(tokens) = crate::providers::for_model(name).context_window {
+    let spec = crate::providers::for_model(name);
+    if let Some(tokens) = crate::providers::model_context_window(spec, name) {
         return Some(tokens);
+    }
+    // Unknown Chat Completions models have no Ollama metadata to query.
+    if !matches!(spec.transport, crate::providers::Transport::Ollama) {
+        return None;
     }
     if !is_safe_model_name(name) {
         return None;
@@ -424,7 +430,9 @@ async fn capabilities_from_show(ollama: &Ollama, name: &str) -> Option<Vec<Strin
 pub(crate) async fn model_accepts_images(ollama: &Ollama, name: &str) -> Option<bool> {
     let spec = crate::providers::for_model(name);
     match spec.transport {
-        crate::providers::Transport::ChatCompletions => Some(spec.supports_images),
+        crate::providers::Transport::ChatCompletions => {
+            Some(crate::providers::model_supports_images(spec, name))
+        }
         crate::providers::Transport::Ollama => ollama_vision_capability(ollama, name).await,
     }
 }
@@ -653,6 +661,13 @@ mod tests {
         let grok = crate::providers::xai::MODELS[0];
         assert!(model_blocked(grok, false, &[]).is_some());
         assert!(model_blocked(grok, true, &[]).is_none());
+        let opencode = crate::providers::selector_name(
+            &crate::providers::opencode::SPEC,
+            crate::providers::opencode::MODELS[0],
+        );
+        assert!(is_cloud_model(&opencode));
+        assert!(model_blocked(&opencode, false, &[]).is_some());
+        assert!(model_blocked(&opencode, true, &[]).is_none());
         // A local model runs when the daemon lists it; an empty list
         // covers a stopped daemon too.
         let local = vec!["lfm2.5:8b".to_string()];

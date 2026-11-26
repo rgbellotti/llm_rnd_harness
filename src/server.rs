@@ -786,6 +786,8 @@ struct ConfigResponse {
     grok_key: bool,
     /// True when `REFLECTION_API_KEY` is set. The key itself stays on the server.
     reflection_key: bool,
+    /// True when `OPENCODE_API_KEY` is set. The key itself stays on the server.
+    opencode_key: bool,
     /// Project memory catalog for the config and tools dropdowns. Notes stay
     /// on `/memory`; this is only the names and the selection.
     memory_recording: bool,
@@ -1127,6 +1129,10 @@ pub(crate) async fn config_handler(State(state): State<AppState>) -> impl IntoRe
             .map(crate::keys::provider_key_available)
             .unwrap_or(false),
         reflection_key: crate::providers::by_id("Reflection")
+            .and_then(|spec| spec.key_env)
+            .map(crate::keys::provider_key_available)
+            .unwrap_or(false),
+        opencode_key: crate::providers::by_id("OpenCode")
             .and_then(|spec| spec.key_env)
             .map(crate::keys::provider_key_available)
             .unwrap_or(false),

@@ -1,5 +1,5 @@
-//! Keep `XAI_API_KEY`, `REFLECTION_API_KEY`, and `HARNESS_DB_KEY` out of a
-//! shell command's reach.
+//! Keep every provider API key and `HARNESS_DB_KEY` out of a shell
+//! command's reach.
 //!
 //! `std::env::remove_var` drops a variable from the libc environment a child
 //! inherits. It does not wipe the bytes `execve` placed on this process's
@@ -9,7 +9,7 @@
 //!
 //! On Linux, startup does two things:
 //!
-//! 1. If either secret is in the block `/proc/self/environ` serves, re-exec
+//! 1. If any secret is in the block `/proc/self/environ` serves, re-exec
 //!    this binary once without those variables. The values cross the exec in
 //!    a pipe, then `set_var` puts them back for [`crate::keys::prepare`].
 //!    `set_var` does not rewrite the stack block, so the new
@@ -432,7 +432,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn assignment_scan_requires_the_name_at_a_boundary() {
-        let buf = b"NOT_XAI_API_KEY=no\0XAI_API_KEY=yes\0REFLECTION_API_KEY=ref\0HARNESS_DB_KEY=db\0";
+        let buf = b"NOT_XAI_API_KEY=no\0XAI_API_KEY=yes\0REFLECTION_API_KEY=ref\0OPENCODE_API_KEY=oc\0HARNESS_DB_KEY=db\0";
         assert_eq!(
             environ_value(buf, b"XAI_API_KEY").as_deref(),
             Some(b"yes".as_slice())
@@ -445,12 +445,16 @@ mod tests {
             environ_value(buf, b"REFLECTION_API_KEY").as_deref(),
             Some(b"ref".as_slice())
         );
+        assert_eq!(
+            environ_value(buf, b"OPENCODE_API_KEY").as_deref(),
+            Some(b"oc".as_slice())
+        );
         assert!(environ_value(buf, b"API_KEY").is_none());
         assert!(environ_value(b"XAI_API_KEY", b"XAI_API_KEY").is_none());
         let found = secrets_in_environ(buf);
-        assert_eq!(found.len(), 3);
+        assert_eq!(found.len(), 4);
         assert_eq!(found[0].1, b"yes");
-        assert_eq!(found[2].1, b"db");
+        assert_eq!(found[3].1, b"db");
     }
 
     #[cfg(target_os = "linux")]

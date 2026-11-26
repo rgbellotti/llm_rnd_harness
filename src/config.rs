@@ -433,6 +433,14 @@ mod config_tests {
             empty[3]["models"].as_array().unwrap().len(),
             crate::providers::reflection::MODELS.len()
         );
+        assert_eq!(empty[4]["group"], "OPENCODE");
+        assert_eq!(
+            empty[4]["models"].as_array().unwrap().len(),
+            crate::providers::opencode::MODELS.len()
+        );
+        assert!(empty[4]["models"].as_array().unwrap().iter().all(|model| {
+            model.as_str().unwrap().starts_with("opencode/")
+        }));
     }
 
     #[test]
@@ -529,7 +537,7 @@ mod config_tests {
             .iter()
             .map(|group| group["group"].as_str().unwrap())
             .collect();
-        assert_eq!(labels, vec!["OLLAMA", "LOCAL", "GROK", "REFLECTION"]);
+        assert_eq!(labels, vec!["OLLAMA", "LOCAL", "GROK", "REFLECTION", "OPENCODE"]);
         let names: Vec<&str> = groups
             .as_array()
             .unwrap()
@@ -539,7 +547,8 @@ mod config_tests {
             .collect();
         for spec in crate::providers::REGISTRY {
             for model in spec.models {
-                assert!(names.contains(model), "{model} missing from selector");
+                let selected = crate::providers::selector_name(spec, model);
+                assert!(names.contains(&selected.as_str()), "{selected} missing from selector");
             }
         }
         assert!(names.contains(&"chat:1b"));

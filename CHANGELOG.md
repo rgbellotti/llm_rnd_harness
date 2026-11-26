@@ -13,6 +13,14 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
   total recorded count. Returning from an open session keeps the current
   page; deleting the last row on a page moves back to the new final page.
 
+- OpenCode Console pay-as-you-go inference is available as the `OPENCODE`
+  selector group. Add credits and create an API key in the
+  [OpenCode Console](https://opencode.ai/console), store it as
+  `OPENCODE_API_KEY`, then choose an `opencode/<model>` entry. The gateway
+  uses OpenAI Chat Completions, sends a stable `x-opencode-session` header,
+  and reports dollar cost in `usage.cost`. Free-tier chat models are not
+  offered because Console rejects them for external harnesses.
+
 ### Security
 
 - The per-launch user comment marker is now the first 20 hex characters

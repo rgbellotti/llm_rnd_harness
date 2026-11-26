@@ -1812,7 +1812,7 @@ pub(crate) async fn run_tool_loop(
                         }
                     };
                     if !chunk.model.is_empty() {
-                        round_model = chunk.model.clone();
+                        round_model = crate::providers::selector_name(spec, &chunk.model);
                     }
                     if let Some(reason) = chunk.finish_reason.as_deref() {
                         round_finish_reason = Some(reason.to_string());

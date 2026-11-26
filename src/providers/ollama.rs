@@ -8,7 +8,7 @@
 //! transport calls. Errors carry the raw response body so the
 //! "does not support thinking" retry in the loop can string-match it.
 
-use super::{ProviderSpec, Transport};
+use super::{CatalogFormat, ProviderSpec, Transport};
 
 use ollama_rs::Ollama;
 use ollama_rs::generation::chat::ChatMessageResponse;
@@ -57,6 +57,9 @@ pub(crate) const SPEC: ProviderSpec = ProviderSpec {
     host: "http://127.0.0.1:11434",
     chat_url: None,
     models: MODELS,
+    selector_prefix: None,
+    conversation_id_prefix: None,
+    catalog_format: CatalogFormat::OllamaCloud,
     key_env: None,
     // Per-model, not per-provider: a catalog tag or any installed tag
     // ending in `:cloud` is a cloud model; a local tag is not.
