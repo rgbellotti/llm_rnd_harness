@@ -390,15 +390,17 @@
         .scroll-jump-anchor-end { bottom: 0; scroll-margin-bottom: 0.5rem; }
         .scroll-jump {
             position: absolute;
-            left: 50%;
-            z-index: 4;
-            display: block;
-            width: 56px;
+            left: 0;
+            z-index: 6;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            width: 100%;
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
             border: 0;
             background: transparent;
-            transform: translateX(-50%);
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.1s linear;
@@ -406,10 +408,12 @@
             text-decoration: none;
             cursor: pointer;
         }
+        .scroll-jump-down { align-items: flex-end; }
         .scroll-jump.is-near { opacity: 1; pointer-events: auto; }
         .scroll-jump[hidden] { display: none !important; }
         .scroll-jump img {
             display: block;
+            flex: 0 0 auto;
             width: 56px;
             height: auto;
             user-select: none;

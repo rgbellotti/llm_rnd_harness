@@ -375,16 +375,16 @@ function maybeScroll() {
 }
 // Jump arrows for an expanded history round or tool card whose text runs
 // past the window. Each arrow is offered only while its own edge of the
-// text is off screen, and the icon fades in only while the pointer is
-// inside the inward semicircle at that edge (lower half for the top
-// arrow, upper half for the bottom arrow) or on the icon itself.
+// text is off screen. Its click zone is a full-width band with the same
+// inward reach the old proximity semicircle had; the centered icon fades
+// in anywhere in that band and the whole band performs the jump.
 // The sticky control bar covers the top of the window. The top arrow
-// and its semicircle hang from the bar's bottom, not from y=0, or the
-// icon is painted under the bar and the hover region never meets the
-// pointer. A jump lands one line past that edge, so the neighboring
-// round's header stays in view and the landing does not look like the
-// end of the session. The start landing also clears the control bar.
-const SCROLL_JUMP_RADIUS = 72;
+// and its band hang from the bar's bottom, not from y=0, or the icon is
+// painted under the bar and the hover region never meets the pointer.
+// A jump lands one line past that edge, so the neighboring round's header
+// stays in view and the landing does not look like the end of the session.
+// The start landing also clears the control bar.
+const SCROLL_JUMP_REACH = 72;
 let scrollJumpPanels = [];
 let scrollJumpHits = [];
 let scrollJumpListen = false;
@@ -457,16 +457,6 @@ function ensureSplitToolJumps(panel) {
     for (let i = 0; i < tools.length; i++) {
         if (!panelCondensed(tools[i])) ensureScrollJumps(tools[i]);
     }
-}
-// toward "down": lower semicircle, used by the top arrow.
-// toward "up": upper semicircle, used by the bottom arrow.
-// The flat edge is included so the arrow's own center counts.
-function scrollJumpNear(mx, my, cx, cy, radius, toward) {
-    if (toward === 'down' && my < cy) return false;
-    if (toward === 'up' && my > cy) return false;
-    const dx = mx - cx;
-    const dy = my - cy;
-    return dx * dx + dy * dy <= radius * radius;
 }
 function scrollJumpInBox(mx, my, box) {
     if (!box) return false;
@@ -703,15 +693,31 @@ function measureScrollJumps() {
         const viewTop = edges.viewTop > 0 ? edges.viewTop : 0;
         const visibleTop = Math.max(rect.top, viewTop);
         const visibleBottom = Math.min(rect.bottom, viewH || rect.bottom);
-        const iconH = jumps.up.offsetHeight || 22;
+        const icon = jumps.up.children[0];
+        let iconH = icon && icon.offsetHeight > 0 ? icon.offsetHeight : 0;
+        if (!iconH && icon && typeof icon.getBoundingClientRect === 'function') {
+            const iconBox = icon.getBoundingClientRect();
+            iconH = iconBox && iconBox.height > 0 ? iconBox.height : 0;
+        }
+        if (!iconH) iconH = 22;
         // One arrow-height in from the visible edge. The top edge is the
         // control bar, not the window, so the chevron is not under it.
         const pad = iconH;
         let upTop = visibleTop - rect.top + pad;
         let downTop = visibleBottom - rect.top - iconH - pad;
         if (showUp && showDown && downTop < upTop + iconH + 4) downTop = upTop + iconH + 4;
-        if (showUp) jumps.up.style.top = upTop + 'px';
-        if (showDown) jumps.down.style.top = downTop + 'px';
+        // The old proximity area reached inward from the icon. Keep that
+        // vertical reach, but use the panel's whole width for hover/click.
+        if (showUp) {
+            jumps.up.style.top = upTop + 'px';
+            jumps.up.style.height = (iconH + SCROLL_JUMP_REACH) + 'px';
+        }
+        if (showDown) {
+            jumps.down.style.top = (downTop - SCROLL_JUMP_REACH) + 'px';
+            jumps.down.style.height = (iconH + SCROLL_JUMP_REACH) + 'px';
+        }
+        // Measure the links after sizing them so hover uses exactly the
+        // rectangle the browser makes clickable, including card padding.
         const upBox = showUp ? jumps.up.getBoundingClientRect() : null;
         const downBox = showDown ? jumps.down.getBoundingClientRect() : null;
         hits.push({
@@ -719,9 +725,6 @@ function measureScrollJumps() {
             showDown: showDown,
             up: jumps.up,
             down: jumps.down,
-            cx: rect.left + rect.width / 2,
-            upCy: upBox ? upBox.top + upBox.height / 2 : 0,
-            downCy: downBox ? downBox.top + downBox.height / 2 : 0,
             upBox: upBox,
             downBox: downBox
         });
@@ -740,10 +743,8 @@ function applyScrollJumpNear() {
             }
             continue;
         }
-        const up = hit.showUp && (scrollJumpInBox(mouse.x, mouse.y, hit.upBox)
-            || scrollJumpNear(mouse.x, mouse.y, hit.cx, hit.upCy, SCROLL_JUMP_RADIUS, 'down'));
-        const down = hit.showDown && (scrollJumpInBox(mouse.x, mouse.y, hit.downBox)
-            || scrollJumpNear(mouse.x, mouse.y, hit.cx, hit.downCy, SCROLL_JUMP_RADIUS, 'up'));
+        const up = hit.showUp && scrollJumpInBox(mouse.x, mouse.y, hit.upBox);
+        const down = hit.showDown && scrollJumpInBox(mouse.x, mouse.y, hit.downBox);
         setJumpNear(hit.up, up);
         setJumpNear(hit.down, down);
     }

@@ -828,13 +828,6 @@ assert.deepEqual(
     cmdEditTip.children.map(node => node.textContent),
     ['+5/-1 - printf model-ok + echo one + echo two …', '+1/-1 - Timeout: 30s + Timeout: none']
 );
-assert.equal(evaluate('scrollJumpNear(0, 10, 0, 0, 72, "down")'), true);
-assert.equal(evaluate('scrollJumpNear(0, -10, 0, 0, 72, "down")'), false);
-assert.equal(evaluate('scrollJumpNear(0, -10, 0, 0, 72, "up")'), true);
-assert.equal(evaluate('scrollJumpNear(0, 10, 0, 0, 72, "up")'), false);
-assert.equal(evaluate('scrollJumpNear(0, 0, 0, 0, 72, "down")'), true);
-assert.equal(evaluate('scrollJumpNear(80, 10, 0, 0, 72, "down")'), false);
-assert.equal(evaluate('scrollJumpNear(0, 80, 0, 0, 72, "up")'), false);
 assert.equal(evaluate('scrollJumpDelta("start", 800, -1200, 800, 22, -1310)'), -1314);
 assert.equal(evaluate('scrollJumpDelta("end", 800, -400, 2400, 22, 2522)'), 1726);
 assert.equal(evaluate('scrollJumpDelta("start", 800, 900, 2000, 22, 10)'), 122);
@@ -845,8 +838,9 @@ assert.equal(evaluate('scrollJumpDelta("start", 800, -1200, 800, 22, -1310, 180)
 Element.prototype.getBoundingClientRect = function () {
     if (this._rect) return this._rect;
     const cls = String(this.className || '');
-    if (cls.includes('scroll-jump-down')) return { top: 760, bottom: 782, left: 172, right: 228, width: 56, height: 22 };
-    if (cls.includes('scroll-jump-up')) return { top: 6, bottom: 28, left: 172, right: 228, width: 56, height: 22 };
+    if (cls.includes('scroll-jump-down')) return { top: 684, bottom: 778, left: 0, right: 400, width: 400, height: 94 };
+    if (cls.includes('scroll-jump-up')) return { top: 22, bottom: 116, left: 0, right: 400, width: 400, height: 94 };
+    if (cls.includes('scroll-jump-icon')) return { top: 0, bottom: 22, left: 0, right: 56, width: 56, height: 22 };
     return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 };
 };
 document.querySelector = (sel) => (
@@ -865,18 +859,50 @@ assert.ok(jumps, 'a tall expanded window grows jump links');
 assert.equal(jumps.up.hidden, false);
 assert.equal(jumps.down.hidden, false);
 assert.equal(jumps.up.style.top, '142px');
-assert.equal(jumps.down.style.top, '876px');
+assert.equal(jumps.down.style.top, '804px');
 assert.equal(jumps.down.href, '#' + jumps.end.id);
 assert.equal(jumps.up.children[0].src, 'data:image/png;base64,abc');
 assert.equal(String(jumps.down.children[0].className).includes('scroll-jump-icon'), true);
-sandbox.onScrollJumpMouse({ clientX: 200, clientY: 40 });
+assert.equal(jumps.up.style.height, '94px');
+assert.equal(jumps.down.style.height, '94px');
+const jumpCss = fs.readFileSync(__dirname + '/../style.css', 'utf8');
+const jumpRule = jumpCss.match(/\.scroll-jump\s*\{([^}]*)\}/)[1];
+assert.match(jumpRule, /left:\s*0;/, 'the click band starts at the block edge');
+assert.match(jumpRule, /width:\s*100%;/, 'the click band spans the block width');
+assert.match(jumpRule, /justify-content:\s*center;/, 'the arrow stays centered in the band');
+assert.match(jumpCss, /\.scroll-jump\.is-near\s*\{[^}]*pointer-events:\s*auto;/, 'the hovered band accepts clicks');
+const jumpHit = evaluate('scrollJumpHits').find(hit => hit.up === jumps.up);
+assert.ok(jumpHit, 'the panel has measured hover/click bands');
+assert.deepEqual(
+    [jumpHit.upBox.left, jumpHit.upBox.right, jumpHit.upBox.top, jumpHit.upBox.bottom],
+    [0, 400, 22, 116],
+    'the top band spans the block width and keeps the inward reach'
+);
+assert.deepEqual(
+    [jumpHit.downBox.left, jumpHit.downBox.right, jumpHit.downBox.top, jumpHit.downBox.bottom],
+    [0, 400, 684, 778],
+    'the bottom band spans the block width and keeps the inward reach'
+);
+for (const clientX of [20, 200, 380]) {
+    sandbox.onScrollJumpMouse({ clientX, clientY: 40 });
+    assert.equal(jumps.up.classList.contains('is-near'), true, 'top arrow appears across the full block width');
+    assert.equal(jumps.down.classList.contains('is-near'), false);
+}
+sandbox.onScrollJumpMouse({ clientX: -1, clientY: 40 });
+assert.equal(jumps.up.classList.contains('is-near'), false);
+sandbox.onScrollJumpMouse({ clientX: 401, clientY: 40 });
+assert.equal(jumps.up.classList.contains('is-near'), false);
+sandbox.onScrollJumpMouse({ clientX: 200, clientY: 116 });
 assert.equal(jumps.up.classList.contains('is-near'), true);
-assert.equal(jumps.down.classList.contains('is-near'), false);
-sandbox.onScrollJumpMouse({ clientX: 200, clientY: 0 });
+sandbox.onScrollJumpMouse({ clientX: 200, clientY: 117 });
 assert.equal(jumps.up.classList.contains('is-near'), false);
-sandbox.onScrollJumpMouse({ clientX: 200, clientY: 740 });
+sandbox.onScrollJumpMouse({ clientX: 20, clientY: 740 });
+assert.equal(jumps.down.classList.contains('is-near'), true, 'bottom arrow appears across the full block width');
+assert.equal(jumps.up.classList.contains('is-near'), false);
+sandbox.onScrollJumpMouse({ clientX: 380, clientY: 684 });
 assert.equal(jumps.down.classList.contains('is-near'), true);
-assert.equal(jumps.up.classList.contains('is-near'), false);
+sandbox.onScrollJumpMouse({ clientX: 200, clientY: 683 });
+assert.equal(jumps.down.classList.contains('is-near'), false);
 sandbox.onScrollJumpMouse({ clientX: 200, clientY: 800 });
 assert.equal(jumps.down.classList.contains('is-near'), false);
 // Start of the text is on screen, so the upward arrow stays hidden.
@@ -960,8 +986,8 @@ sandbox.refreshScrollJumps(clippedShort);
 assert.equal(clippedShort._scrollJumps.up.hidden, true);
 assert.equal(clippedShort._scrollJumps.down.hidden, true);
 
-// The control bar covers y=0. The top arrow hangs below that bar, and
-// its lower semicircle is measured from the icon, not from the window edge.
+// The control bar covers y=0. The top arrow and its click band hang
+// below that bar, not from the window edge.
 const bar = document.getElementById('controlDashboard');
 bar._rect = { top: 0, bottom: 180, left: 0, right: 800, width: 800, height: 180 };
 const covered = document.createElement('div');
@@ -972,8 +998,8 @@ sandbox.refreshScrollJumps(covered);
 const coveredJumps = covered._scrollJumps;
 assert.equal(coveredJumps.up.hidden, false);
 assert.equal(coveredJumps.up.style.top, '322px');
-assert.equal(coveredJumps.down.style.top, '876px');
-coveredJumps.up._rect = { top: 202, bottom: 224, left: 172, right: 228, width: 56, height: 22 };
+assert.equal(coveredJumps.down.style.top, '804px');
+coveredJumps.up._rect = { top: 202, bottom: 296, left: 0, right: 400, width: 400, height: 94 };
 sandbox.refreshScrollJumps(covered);
 sandbox.onScrollJumpMouse({ clientX: 200, clientY: 40 });
 assert.equal(coveredJumps.up.classList.contains('is-near'), false);

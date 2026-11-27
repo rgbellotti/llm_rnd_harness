@@ -23,6 +23,12 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
   and reports dollar cost in `usage.cost`. Free-tier chat models are not
   offered because Console rejects them for external harnesses.
 
+### Changed
+
+- History scroll-arrow proximity areas are now full-width click bands.
+  The arrow appears anywhere within the top or bottom band, and clicking
+  anywhere in the band jumps to that edge of the text.
+
 ### Security
 
 - The per-launch user comment marker is now the first 20 hex characters
