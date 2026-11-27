@@ -81,7 +81,7 @@ vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(__dirname + '/history.js', 'utf8'), sandbox);
 const evaluate = code => vm.runInContext(code, sandbox);
 const historyView = () => document.getElementById('historyView');
-const rows = () => historyView().children.filter(child => child.classList.contains('hist-row'));
+const rows = () => descendants(historyView(), child => child.classList.contains('hist-row'));
 const pagination = () => descendants(historyView(), child => child.classList.contains('history-pagination'))[0];
 const summary = () => descendants(historyView(), child => child.classList.contains('history-page-summary'))[0];
 
@@ -90,6 +90,9 @@ const summary = () => descendants(historyView(), child => child.classList.contai
     assert.equal(requests[0], '/history/page?limit=20&offset=0');
     assert.equal(rows().length, 20);
     assert.ok(summary(), 'the page range is displayed');
+    assert.equal(evaluate('historySubtab'), 'sessions');
+    assert.equal(document.getElementById('history-sessions-pane').hidden, false);
+    assert.equal(document.getElementById('history-hid-pane').hidden, true);
     let nav = pagination();
     assert.equal(nav.children.length, 5, 'first, previous, position, next, last');
     assert.equal(nav.children[0].hidden, true, 'first is hidden on page one');
@@ -126,8 +129,17 @@ const summary = () => descendants(historyView(), child => child.classList.contai
 
     // Opening a transcript and using its back action returns to the same
     // summary page instead of jumping to the newest sessions.
-    await evaluate("openHistory('run-44')");
-    const head = historyView().children[0];
+    // Click the rendered session link, not openHistory directly: the tab
+    // shell must leave the list's link handler wired and functional. Use an
+    // array-like children collection without indexOf, like the browser's
+    // HTMLCollection, so this also guards the real-DOM reuse path.
+    const htmlChildren = new Proxy(historyView().children, {
+        get(target, key) { return key === 'indexOf' ? undefined : Reflect.get(target, key); },
+    });
+    historyView().children = htmlChildren;
+    const sessionLink = rows()[0].children[1];
+    await sessionLink.onclick({ preventDefault() {} });
+    const head = descendants(historyView(), child => child.classList.contains('history-session-head'))[0];
     const actions = head.children.find(child => child.classList.contains('menu-row'));
     await actions.children[0].onclick();
     assert.equal(requests[requests.length - 1], '/history/page?limit=20&offset=20');

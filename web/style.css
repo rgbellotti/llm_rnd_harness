@@ -188,6 +188,7 @@
                was sticking long Diagnostics panes to their last line. */
             overflow-anchor: none;
         }
+        #historyView { margin-top: 0.2rem; padding-top: 0.2rem; }
         /* A session that is still being written has no rounds yet. Keep
            the area under the controls blank until Generate prints some. */
         #output:not(:has(.round, .error, .done, .metrics, .scroll-spacer)) {
@@ -652,6 +653,12 @@
         .sub-tab:hover { color: var(--h-title, #caca8a); }
         .sub-tab.sub-tab-active { background: var(--h-surface, #112233); color: var(--h-active, #caca8a); border-color: var(--h-focus, #4a6a8a); }
         .sub-pane { padding-top: 0.4rem; overflow-anchor: none; }
+        .history-subtabs { margin-top: 0; }
+        .history-sessions-pane, .history-hid-pane { padding-top: 0.2rem; }
+        .history-hid-form { align-items: center; }
+        .history-hid-input { width: 10rem; min-width: 0; padding: 0.35rem 0.5rem; background: var(--h-inset, #0a1a28); color: var(--h-text, #aaaa77); border: 1px solid var(--h-border, #334455); border-radius: 4px; font: inherit; }
+        .history-sessions-pane[hidden], .history-hid-pane[hidden], .history-hid-result[hidden] { display: none !important; }
+        .history-hid-text { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; overflow-x: hidden; max-height: 60vh; overflow-y: auto; margin: 0.4rem 0 0; font: inherit; color: inherit; background: transparent; }
         .response-pane .round { margin-top: 0.3rem; }
         .response-answer .round-body { font-size: 0.92rem; }
         #stopBtn { border: 1px solid var(--h-stop, #8a4a4a); color: var(--h-stop-text, #e0a0a0); }

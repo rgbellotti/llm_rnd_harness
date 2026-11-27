@@ -12,6 +12,8 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
   First / Previous / Next / Last controls, a page-range summary, and the
   total recorded count. Returning from an open session keeps the current
   page; deleting the last row on a page moves back to the new final page.
+  A **HID** sub-tab recalls a stored event by numeric id, shows its text
+  and metadata, and copies the block text without sending it to the model.
 
 - OpenCode Console pay-as-you-go inference is available as the `OPENCODE`
   selector group. Add credits and create an API key in the
@@ -32,6 +34,10 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
   both shapes.
 
 ### Fixed
+
+- History session links open transcripts again in browsers, where the
+  tab shell reuses an `HTMLCollection` rather than a test array. The HID
+  input starts blank and the history content sits closer to the dashboard.
 
 - Manual `web_fetch` tests in the **tools** tab now show browser stderr and
   non-zero or missing exit status in a separate diagnostics panel below the

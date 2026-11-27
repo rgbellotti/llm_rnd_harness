@@ -31,6 +31,9 @@ let announcedInterruptedId = '';
 const HISTORY_PAGE_SIZE = 20;
 let historyListPage = 0;
 let historyListRequest = 0;
+let historySubtab = 'sessions';
+let historySubtabRefs = null;
+let historyHidRequest = 0;
 function seenInterruptedId() {
     try { return localStorage.getItem('harness.interrupted.seen') || ''; } catch (e) { return ''; }
 }
@@ -87,6 +90,7 @@ async function showHistory() {
     // renderTabBar parks or hides the composer for this width.
     renderTabBar();
     historyListPage = 0;
+    historySubtab = 'sessions';
     await renderHistoryList();
 }
 // createSession closes this view. Curate on a wide screen opens it
@@ -107,6 +111,191 @@ function reopenHistoryPane() {
     const hv = document.getElementById('historyView');
     if (hv) hv.style.display = '';
     if (typeof renderTabBar === 'function') renderTabBar();
+}
+
+function ensureHistoryShell() {
+    const hv = document.getElementById('historyView');
+    if (historySubtabRefs && Array.prototype.indexOf.call(hv.children, historySubtabRefs.tabs) >= 0) return historySubtabRefs;
+    historyHidRequest += 1;
+    hv.innerHTML = '';
+    const tabs = document.createElement('div');
+    tabs.className = 'sub-tabs history-subtabs';
+    tabs.setAttribute('role', 'tablist');
+    const sessionsTab = document.createElement('button');
+    sessionsTab.type = 'button';
+    sessionsTab.className = 'sub-tab';
+    sessionsTab.id = 'history-sessions-tab';
+    sessionsTab.textContent = 'Sessions';
+    sessionsTab.setAttribute('role', 'tab');
+    sessionsTab.setAttribute('aria-controls', 'history-sessions-pane');
+    const hidTab = document.createElement('button');
+    hidTab.type = 'button';
+    hidTab.className = 'sub-tab';
+    hidTab.id = 'history-hid-tab';
+    hidTab.textContent = 'HID';
+    hidTab.setAttribute('role', 'tab');
+    hidTab.setAttribute('aria-controls', 'history-hid-pane');
+    tabs.appendChild(sessionsTab);
+    tabs.appendChild(hidTab);
+    const sessionsPane = document.createElement('div');
+    sessionsPane.className = 'sub-pane history-sessions-pane';
+    sessionsPane.id = 'history-sessions-pane';
+    sessionsPane.setAttribute('role', 'tabpanel');
+    sessionsPane.setAttribute('aria-labelledby', 'history-sessions-tab');
+    const hidPane = document.createElement('div');
+    hidPane.className = 'sub-pane history-hid-pane';
+    hidPane.id = 'history-hid-pane';
+    hidPane.setAttribute('role', 'tabpanel');
+    hidPane.setAttribute('aria-labelledby', 'history-hid-tab');
+    buildHistoryHidPane(hidPane);
+    hv.appendChild(tabs);
+    hv.appendChild(sessionsPane);
+    hv.appendChild(hidPane);
+    historySubtabRefs = { tabs, sessionsTab, hidTab, sessionsPane, hidPane };
+    sessionsTab.onclick = () => activateHistorySubtab('sessions');
+    hidTab.onclick = () => activateHistorySubtab('hid');
+    activateHistorySubtab(historySubtab);
+    return historySubtabRefs;
+}
+function activateHistorySubtab(which) {
+    if (which !== 'sessions' && which !== 'hid') return;
+    historySubtab = which;
+    const refs = historySubtabRefs;
+    if (!refs) return;
+    const sessions = which === 'sessions';
+    refs.sessionsPane.hidden = !sessions;
+    refs.hidPane.hidden = sessions;
+    refs.sessionsTab.classList.toggle('sub-tab-active', sessions);
+    refs.hidTab.classList.toggle('sub-tab-active', !sessions);
+    refs.sessionsTab.setAttribute('aria-selected', sessions ? 'true' : 'false');
+    refs.hidTab.setAttribute('aria-selected', sessions ? 'false' : 'true');
+}
+function buildHistoryHidPane(pane) {
+    const head = document.createElement('div');
+    head.className = 'round';
+    head.id = 'history-hid-head';
+    const title = document.createElement('h2');
+    title.className = 'pane-title';
+    title.textContent = 'HID lookup';
+    head.appendChild(title);
+    const hint = document.createElement('div');
+    hint.className = 'metrics';
+    hint.textContent = 'Enter a history event ID (HID) to read the stored block text. This is read-only recall; nothing is sent to the model.';
+    head.appendChild(hint);
+    pane.appendChild(head);
+
+    const form = document.createElement('form');
+    form.id = 'history-hid-form';
+    form.className = 'menu-row history-hid-form';
+    const label = document.createElement('label');
+    label.textContent = 'HID';
+    label.setAttribute('for', 'history-hid-input');
+    const input = document.createElement('input');
+    input.id = 'history-hid-input';
+    input.className = 'history-hid-input';
+    input.type = 'number';
+    input.inputMode = 'numeric';
+    input.min = '1';
+    input.step = '1';
+    input.required = true;
+    const button = document.createElement('button');
+    button.type = 'submit';
+    button.className = 'btn-accept';
+    button.textContent = 'Look up';
+    form.appendChild(label);
+    form.appendChild(input);
+    form.appendChild(button);
+    pane.appendChild(form);
+
+    const status = document.createElement('p');
+    status.id = 'history-hid-status';
+    status.className = 'hint';
+    status.setAttribute('aria-live', 'polite');
+    pane.appendChild(status);
+
+    const result = document.createElement('section');
+    result.id = 'history-hid-result';
+    result.className = 'tool history-hid-result';
+    result.hidden = true;
+    const resultHead = document.createElement('div');
+    resultHead.className = 'round-head';
+    const resultTitle = document.createElement('h3');
+    resultTitle.id = 'history-hid-title';
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'copy-btn';
+    copy.id = 'history-hid-copy';
+    copy.textContent = 'Copy';
+    copy.title = 'Copy the stored block text';
+    resultHead.appendChild(resultTitle);
+    resultHead.appendChild(copy);
+    result.appendChild(resultHead);
+    const meta = document.createElement('div');
+    meta.id = 'history-hid-meta';
+    meta.className = 'metrics';
+    result.appendChild(meta);
+    const text = document.createElement('pre');
+    text.id = 'history-hid-text';
+    text.className = 'history-hid-text';
+    result.appendChild(text);
+    pane.appendChild(result);
+
+    form.onsubmit = event => {
+        if (event && event.preventDefault) event.preventDefault();
+        lookupHistoryHid();
+    };
+}
+async function lookupHistoryHid() {
+    const input = document.getElementById('history-hid-input');
+    const status = document.getElementById('history-hid-status');
+    const result = document.getElementById('history-hid-result');
+    const raw = input ? String(input.value || '').trim() : '';
+    const request = ++historyHidRequest;
+    if (result) result.hidden = true;
+    if (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
+        if (status) status.textContent = 'Enter a positive whole-number HID.';
+        return;
+    }
+    const hid = Number(raw);
+    if (status) status.textContent = 'Loading HID ' + hid + '…';
+    try {
+        const res = await apiFetch('/history/events/' + hid);
+        if (request !== historyHidRequest) return;
+        if (!res.ok) {
+            const detail = await res.text();
+            if (request !== historyHidRequest) return;
+            if (status) status.textContent = res.status === 404
+                ? 'HID ' + hid + ' was not found in the history database.'
+                : 'Could not load HID ' + hid + ': ' + (detail || ('HTTP ' + res.status));
+            return;
+        }
+        const doc = await res.json();
+        if (request !== historyHidRequest) return;
+        const body = typeof historyEventBody === 'function'
+            ? historyEventBody(doc)
+            : JSON.stringify((doc && doc.payload) || {}, null, 2);
+        const title = document.getElementById('history-hid-title');
+        const meta = document.getElementById('history-hid-meta');
+        const text = document.getElementById('history-hid-text');
+        const copy = document.getElementById('history-hid-copy');
+        if (title) title.textContent = 'HID ' + hid;
+        if (meta) {
+            const parts = [];
+            if (doc && doc.type) parts.push(doc.type);
+            if (doc && Number.isSafeInteger(doc.round)) parts.push('round ' + doc.round);
+            if (doc && doc.run_id) parts.push('run ' + doc.run_id);
+            if (doc && doc.created_at) parts.push(new Date(doc.created_at).toLocaleString());
+            if (doc && typeof doc.to_model === 'boolean') parts.push(doc.to_model ? 'sent to model' : 'not sent to model');
+            meta.textContent = parts.join(' · ');
+        }
+        if (text) text.textContent = body == null ? '' : String(body);
+        if (copy) copy.onclick = () => { if (typeof copyText === 'function') copyText(body == null ? '' : String(body), copy); };
+        if (result) result.hidden = false;
+        if (status) status.textContent = 'Loaded HID ' + hid + '.';
+    } catch (e) {
+        if (request !== historyHidRequest) return;
+        if (status) status.textContent = 'Could not load HID ' + hid + ': ' + (e && e.message ? e.message : e);
+    }
 }
 
 function scrollHistoryListHead() {
@@ -162,8 +351,10 @@ function appendHistoryPagination(parent, total, pageCount) {
 async function renderHistoryList() {
     const request = ++historyListRequest;
     if (typeof clearHistoryScroll === 'function') clearHistoryScroll();
-    const hv = document.getElementById('historyView');
-    hv.innerHTML = '<div class="round"><p>Loading history…</p></div>';
+    const refs = ensureHistoryShell();
+    activateHistorySubtab('sessions');
+    const pane = refs.sessionsPane;
+    pane.innerHTML = '<div class="round"><p>Loading history…</p></div>';
     let page;
     try {
         const offset = historyListPage * HISTORY_PAGE_SIZE;
@@ -176,11 +367,11 @@ async function renderHistoryList() {
         }
     } catch (e) {
         if (request !== historyListRequest) return;
-        hv.innerHTML = '';
+        pane.innerHTML = '';
         const d = document.createElement('div');
         d.className = 'error';
         d.textContent = 'Could not load history: ' + e.message + ' (is history enabled on the server?)';
-        hv.appendChild(d);
+        pane.appendChild(d);
         return;
     }
     const runs = page.runs;
@@ -192,14 +383,14 @@ async function renderHistoryList() {
         historyListPage = pageCount - 1;
         return renderHistoryList();
     }
-    hv.innerHTML = '';
+    pane.innerHTML = '';
     const head = document.createElement('div');
     head.className = 'round';
     head.id = 'history-list-head';
     const paneTitle = document.createElement('h2');
     paneTitle.className = 'pane-title';
     paneTitle.textContent = 'Session history (' + total + ' recorded)';
-    hv.appendChild(paneTitle);
+    head.appendChild(paneTitle);
     const summary = document.createElement('div');
     summary.className = 'metrics history-page-summary';
     summary.setAttribute('aria-live', 'polite');
@@ -211,12 +402,12 @@ async function renderHistoryList() {
     hint.className = 'metrics';
     hint.textContent = 'Opening a session does not send it to the model. Curate appends its text into the prompt, or export a copy. On a wide screen the prompt stays open beside this list.';
     head.appendChild(hint);
-    hv.appendChild(head);
+    pane.appendChild(head);
     if (!runs.length) {
         const p = document.createElement('div');
         p.className = 'metrics';
         p.textContent = 'No recorded sessions yet. Finished runs are stored automatically.';
-        hv.appendChild(p);
+        pane.appendChild(p);
         return;
     }
     for (const run of runs) {
@@ -234,7 +425,7 @@ async function renderHistoryList() {
         const when = new Date(run.created_at).toLocaleString();
         link.textContent = historyRowLabel(run, when);
         if (run.status === 'aborted') row.className = 'hist-row hist-interrupted';
-        link.onclick = (e) => { e.preventDefault(); openHistory(run.id); };
+        link.onclick = (e) => { e.preventDefault(); return openHistory(run.id); };
         row.appendChild(link);
         const del = document.createElement('button');
         del.className = 'copy-btn';
@@ -276,14 +467,16 @@ async function renderHistoryList() {
             
         };
         row.appendChild(del);
-        hv.appendChild(row);
+        pane.appendChild(row);
     }
-    appendHistoryPagination(hv, total, pageCount);
+    appendHistoryPagination(pane, total, pageCount);
 }
 
 async function openHistory(id) {
-    const hv = document.getElementById('historyView');
-    hv.innerHTML = '<div class="round"><p>Loading session…</p></div>';
+    const refs = ensureHistoryShell();
+    activateHistorySubtab('sessions');
+    const pane = refs.sessionsPane;
+    pane.innerHTML = '<div class="round"><p>Loading session…</p></div>';
     let doc;
     try {
         const tail = (typeof SCROLL_WINDOW === 'number') ? SCROLL_WINDOW : 8;
@@ -291,11 +484,11 @@ async function openHistory(id) {
         if (!res.ok) throw new Error(await res.text() || ('HTTP ' + res.status));
         doc = await res.json();
     } catch (e) {
-        hv.innerHTML = '';
+        pane.innerHTML = '';
         const d = document.createElement('div');
         d.className = 'error';
         d.textContent = 'Could not open session: ' + e.message;
-        hv.appendChild(d);
+        pane.appendChild(d);
         return;
     }
     const run = doc.run;
@@ -361,7 +554,7 @@ async function openHistory(id) {
         if (at >= 0) sessions.splice(at, 1);
     }
     splitChainView(s);
-    hv.innerHTML = '';
+    pane.innerHTML = '';
     const head = document.createElement('div');
     head.className = 'round history-session-head';
     const ht = document.createElement('div');
@@ -424,7 +617,7 @@ async function openHistory(id) {
     del.onclick = () => {
         // Inline confirm (not confirm()): native dialogs can be
         // suppressed by browser settings — text anchors here instead.
-        if (hv.querySelector('.hist-confirm')) return;
+        if (pane.querySelector('.hist-confirm')) return;
         const box = document.createElement('div');
         box.className = 'hist-confirm';
         box.appendChild(document.createTextNode('Delete this currently opened entry? This frees disk space and cannot be undone. '));
@@ -453,19 +646,19 @@ async function openHistory(id) {
     };
     actions.appendChild(del);
     head.appendChild(actions);
-    hv.appendChild(head);
-    hv.appendChild(s.nodes.container);
+    pane.appendChild(head);
+    pane.appendChild(s.nodes.container);
     if (typeof refreshHistoryScrollJumps === 'function') refreshHistoryScrollJumps(s);
     if (windowed && typeof settleHistoryWindow === 'function') settleHistoryWindow(s);
     if (s.scroll) s.scroll.follow = false;
     if (typeof holdScroll === 'function') holdScroll(s);
-    if (typeof resetScrollers === 'function') resetScrollers(hv);
+    if (typeof resetScrollers === 'function') resetScrollers(pane);
     // Title, metadata, and export sit under the control bar. Scrolling
     // the history view to the viewport top hides that row behind the bar.
     if (typeof scrollBlockBelowDashboard === 'function') scrollBlockBelowDashboard(head);
-    else if (typeof hv.scrollIntoView === 'function') {
-        try { hv.scrollIntoView({ block: 'start', inline: 'nearest' }); }
-        catch (e) { try { hv.scrollIntoView(true); } catch (err) {} }
+    else if (typeof pane.scrollIntoView === 'function') {
+        try { pane.scrollIntoView({ block: 'start', inline: 'nearest' }); }
+        catch (e) { try { pane.scrollIntoView(true); } catch (err) {} }
     }
 }
 

@@ -905,8 +905,10 @@ Two stores with split roles:
   controls, the current page range, and the total recorded count. Each
   opens read-only with JSON/HTML export, shows which files were uploaded
   (hover the file icon), and can be deleted to conserve disk. Opening a
-  session and returning to the list keeps your place. History never feeds
-  back into the model. The database
+  session and returning to the list keeps your place. The **HID** sub-tab
+  looks up one stored event by its numeric history id, shows its block
+  text and metadata, and offers **Copy**; missing ids get a short
+  not-found message. History never feeds back into the model. The database
   (and its write-ahead log) is created private to your user account
   (`0600`): transcripts hold everything the model read. Deleted space is
   reused inside the file; the file itself is compacted once a tenth of
