@@ -2,7 +2,7 @@
 use ollama_rs::generation::tools::ToolInfo;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::SystemTime;
 
@@ -471,6 +471,15 @@ impl WebRequest {
         }
     }
     pub async fn execute(&self, program: &std::path::Path) -> Execution {
+        if let Some(reason) = web_tool_setup_error() {
+            return Execution {
+                stdout: String::new(),
+                stderr: reason.to_string(),
+                exit_code: None,
+                duration_ms: 0,
+                raw_body: None,
+            };
+        }
         if !integrity_ok() {
             return Execution {
                 stdout: String::new(),
@@ -621,10 +630,41 @@ impl WebToolFileStamp {
 }
 
 static WEB_TOOL_STAMP: OnceLock<Option<Vec<WebToolFileStamp>>> = OnceLock::new();
+/// Set by the startup snapshot when a required source/entrypoint file is
+/// absent. Tests never take the snapshot, so their fake runners stay usable.
+static WEB_TOOL_SETUP_ERROR: OnceLock<Option<String>> = OnceLock::new();
 
 /// Upper bound on the `.venv/lib` walk. A tree past this size is not
 /// partially trusted: the web tools refuse until it is understood.
 const MAX_VENV_FILES: usize = 50_000;
+
+const WEB_TOOL_REQUIRED_FILES: &[&str] = &[
+    "web_tool/src/web_tool/__init__.py",
+    "web_tool/pyproject.toml",
+    "web_tool/uv.lock",
+    "web_tool/.venv/bin/web-tool",
+    "web_tool/.venv/bin/python",
+];
+
+fn capture_required_web_tool_files(root: &Path) -> (Vec<WebToolFileStamp>, Option<String>) {
+    let mut stamps = Vec::new();
+    let mut missing = Vec::new();
+    for relative in WEB_TOOL_REQUIRED_FILES {
+        match WebToolFileStamp::capture(root.join(relative)) {
+            Some(stamp) => stamps.push(stamp),
+            None => missing.push(*relative),
+        }
+    }
+    let setup_error = if missing.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "Web tool setup is incomplete: missing {}. Run `uv sync --project web_tool`, then `uv run --project web_tool playwright install chromium`, and restart the harness.",
+            missing.join(", ")
+        ))
+    };
+    (stamps, setup_error)
+}
 
 /// Capture the trusted web-tool file set at startup. Called by `main`;
 /// tests that do not call it keep the check dormant.
@@ -638,17 +678,8 @@ const MAX_VENV_FILES: usize = 50_000;
 /// rather than followed, so a link cycle cannot loop the walk.
 pub(crate) fn snapshot_integrity() {
     let root = crate::config::WORKSPACE_DIR.as_path();
-    let files = [
-        "web_tool/src/web_tool/__init__.py",
-        "web_tool/pyproject.toml",
-        "web_tool/uv.lock",
-        "web_tool/.venv/bin/web-tool",
-        "web_tool/.venv/bin/python",
-    ];
-    let mut stamps: Vec<WebToolFileStamp> = files
-        .iter()
-        .filter_map(|relative| WebToolFileStamp::capture(root.join(relative)))
-        .collect();
+    let (mut stamps, setup_error) = capture_required_web_tool_files(root);
+    let _ = WEB_TOOL_SETUP_ERROR.set(setup_error);
     // A tree that cannot be walked within the cap is not partially
     // trusted: clearing the stamps makes every web call refuse (the
     // empty stamp fails closed below) instead of running on unstamped
@@ -657,6 +688,10 @@ pub(crate) fn snapshot_integrity() {
         stamps.clear();
     }
     let _ = WEB_TOOL_STAMP.set(Some(stamps));
+}
+
+fn web_tool_setup_error() -> Option<&'static str> {
+    WEB_TOOL_SETUP_ERROR.get().and_then(Option::as_deref)
 }
 
 /// Walk `web_tool/.venv/lib` and stamp every file. Returns false when
@@ -727,6 +762,31 @@ pub(crate) fn tool_infos() -> Vec<ToolInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_web_tool_entrypoint_names_the_setup_commands() {
+        let dir = std::env::temp_dir().join(format!("harness-web-setup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("web_tool/src/web_tool")).unwrap();
+        std::fs::write(dir.join("web_tool/src/web_tool/__init__.py"), "# source\n").unwrap();
+        std::fs::write(dir.join("web_tool/pyproject.toml"), "[project]\n").unwrap();
+        std::fs::write(dir.join("web_tool/uv.lock"), "version = 1\n").unwrap();
+        std::fs::create_dir_all(dir.join("web_tool/.venv/bin")).unwrap();
+        std::fs::write(dir.join("web_tool/.venv/bin/python"), "python\n").unwrap();
+
+        let (stamps, error) = capture_required_web_tool_files(&dir);
+        assert_eq!(stamps.len(), 4);
+        let error = error.expect("missing entrypoint is reported");
+        assert!(error.contains("web_tool/.venv/bin/web-tool"), "{error}");
+        assert!(error.contains("uv sync --project web_tool"), "{error}");
+        assert!(error.contains("playwright install chromium"), "{error}");
+
+        std::fs::write(dir.join("web_tool/.venv/bin/web-tool"), "entrypoint\n").unwrap();
+        let (stamps, error) = capture_required_web_tool_files(&dir);
+        assert_eq!(stamps.len(), WEB_TOOL_REQUIRED_FILES.len());
+        assert!(error.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn the_venv_walk_stamps_installed_files_and_honors_its_cap() {

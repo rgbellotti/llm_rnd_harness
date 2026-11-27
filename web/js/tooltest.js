@@ -1,6 +1,36 @@
 // Manual tool testing: run a registered tool directly, without recording.
 let toolTestState = { tool: '', values: {} };
 
+// Manual tests already receive the machine-shaped execution JSON. For
+// web_fetch, pull browser stderr and exit status out for a dedicated panel
+// without changing the editable page-text preview or what a model receives.
+// Other tools keep their existing preview behavior; request-level errors
+// still use the panel below.
+function toolTestDiagnostics(data) {
+    if (!data) return '';
+    if (data.error) return String(data.error);
+    if (data.tool !== 'web_fetch' || !data.raw) return '';
+    let raw;
+    try { raw = JSON.parse(data.raw); } catch (e) { return ''; }
+    if (!raw || typeof raw !== 'object') return '';
+    const stderr = typeof raw.stderr === 'string' ? raw.stderr.trim() : '';
+    const hasExit = Object.prototype.hasOwnProperty.call(raw, 'exit_code');
+    const badExit = hasExit && raw.exit_code !== 0;
+    if (!stderr && !badExit) return '';
+    const lines = [];
+    if (stderr) lines.push(stderr);
+    if (badExit) lines.push('exit code: ' + (raw.exit_code == null ? 'unavailable' : raw.exit_code));
+    return lines.join('\n');
+}
+function showToolTestDiagnostics(text) {
+    const box = document.getElementById('tt-diagnostics');
+    const body = document.getElementById('tt-diagnostics-text');
+    if (!box || !body) return;
+    const value = String(text || '').trim();
+    body.textContent = value;
+    box.hidden = !value;
+}
+
 function testableTools() {
     const c = cachedConfig;
     if (!c || !Array.isArray(c.tools)) return [];
@@ -224,6 +254,20 @@ function renderToolTest() {
     result.style.minHeight = '420px';
     view.appendChild(result);
 
+    const diagnostics = document.createElement('section');
+    diagnostics.id = 'tt-diagnostics';
+    diagnostics.className = 'tool-test-diagnostics';
+    diagnostics.hidden = true;
+    const diagnosticsLabel = document.createElement('label');
+    diagnosticsLabel.textContent = 'Diagnostics (not submitted to the model)';
+    diagnosticsLabel.setAttribute('for', 'tt-diagnostics-text');
+    const diagnosticsText = document.createElement('pre');
+    diagnosticsText.id = 'tt-diagnostics-text';
+    diagnosticsText.className = 'tool-test-diagnostics-text';
+    diagnostics.appendChild(diagnosticsLabel);
+    diagnostics.appendChild(diagnosticsText);
+    view.appendChild(diagnostics);
+
     const details = document.createElement('details');
     const summary = document.createElement('summary');
     summary.textContent = 'Raw execution JSON';
@@ -259,6 +303,7 @@ function renderToolTest() {
     buildForm();
 
     runBtn.addEventListener('click', async () => {
+        showToolTestDiagnostics('');
         status.textContent = 'Running…';
         const t = tools.find(x => x.function.name === select.value);
         const props = (t.function.parameters && t.function.parameters.properties) || {};
@@ -277,6 +322,7 @@ function renderToolTest() {
                     v = parsed;
                 } catch (e) {
                     status.textContent = 'Error: ' + e.message;
+                    showToolTestDiagnostics('Error: ' + e.message);
                     return;
                 }
             }
@@ -290,14 +336,19 @@ function renderToolTest() {
             });
             const data = await res.json();
             if (!res.ok || data.error) {
-                status.textContent = 'Error: ' + (data.error || res.statusText);
+                const message = 'Error: ' + (data.error || res.statusText);
+                status.textContent = message;
+                showToolTestDiagnostics(message);
                 return;
             }
             status.textContent = 'Done.';
             result.value = data.preview || '';
             raw.textContent = data.raw || '';
+            showToolTestDiagnostics(toolTestDiagnostics(data));
         } catch (e) {
-            status.textContent = 'Request failed: ' + e;
+            const message = 'Request failed: ' + e;
+            status.textContent = message;
+            showToolTestDiagnostics(message);
         }
     });
 }

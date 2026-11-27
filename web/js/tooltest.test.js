@@ -6,11 +6,29 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 class Element {
-    constructor(tag) { this.tag = tag; this.style = {}; this.children = []; this.value = ''; this.dataset = {}; this.placeholder = ''; }
+    constructor(tag) { this.tag = tag; this.style = {}; this.children = []; this.value = ''; this.dataset = {}; this.placeholder = ''; this._listeners = {}; this._id = ''; }
+    get id() { return this._id; }
+    set id(value) {
+        const next = value == null ? '' : String(value);
+        if (next === this._id) return;
+        if (this._id && elements.get(this._id) === this) elements.delete(this._id);
+        this._id = next;
+        if (next) elements.set(next, this);
+    }
     appendChild(child) { this.children.push(child); return child; }
     append(...children) { this.children.push(...children); }
     setAttribute(name, value) { this[name] = value; }
-    addEventListener(_name, _fn) {}
+    addEventListener(name, fn) { (this._listeners[name] = this._listeners[name] || []).push(fn); }
+    set innerHTML(value) { this.children = []; }
+    querySelector(selector) {
+        const tag = selector.replace(/^\./, '');
+        for (const child of this.children) {
+            if (child.tag === tag || String(child.className || '').split(/\s+/).includes(tag)) return child;
+            const nested = child.querySelector && child.querySelector(selector);
+            if (nested) return nested;
+        }
+        return null;
+    }
 }
 const elements = new Map();
 const document = {
@@ -92,4 +110,80 @@ evaluate('toolTestState.tool = "write_file"; toolTestState.values = { path: "kep
 const kept = evaluate('fieldForProperty("path", { type: "string" })');
 assert.equal(kept.children[1].value, 'kept.txt');
 
-console.log('== tooltest.test.js ok');
+// The dedicated diagnostics panel uses the existing raw execution JSON.
+// Browser stderr is shown even on exit 0 because refused subresources can
+// explain a page with missing content; a quiet successful run has no panel.
+const diagnostic = raw => evaluate('toolTestDiagnostics(' + JSON.stringify({ tool: 'web_fetch', raw: JSON.stringify(raw) }) + ')');
+assert.equal(
+    diagnostic({ stdout: '', stderr: 'fetch failed: net::ERR_CONNECTION_RESET', exit_code: 1 }),
+    'fetch failed: net::ERR_CONNECTION_RESET\nexit code: 1'
+);
+assert.equal(
+    diagnostic({ stdout: 'Hello', stderr: 'refused websocket: wss://example.com', exit_code: 0 }),
+    'refused websocket: wss://example.com'
+);
+assert.equal(diagnostic({ stdout: 'Hello', stderr: '', exit_code: 0 }), '');
+assert.equal(diagnostic({ stdout: '', stderr: '', exit_code: null }), 'exit code: unavailable');
+assert.equal(evaluate('toolTestDiagnostics({ error: "provide one HTTP(S) url" })'), 'provide one HTTP(S) url');
+assert.equal(evaluate('toolTestDiagnostics({ raw: "not json" })'), '');
+assert.equal(evaluate('toolTestDiagnostics({ tool: "web_search", raw: ' + JSON.stringify(JSON.stringify({ stderr: 'search failed', exit_code: 1 })) + ' })'), '');
+
+const descendants = (node, predicate) => {
+    const found = [];
+    for (const child of node.children || []) {
+        if (predicate(child)) found.push(child);
+        found.push(...descendants(child, predicate));
+    }
+    return found;
+};
+
+(async () => {
+    sandbox.cachedConfig = { tools: [{ function: {
+        name: 'web_fetch',
+        parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] }
+    } }] };
+    evaluate('toolTestState = { tool: "web_fetch", values: {} }; renderToolTest()');
+    const view = elements.get('toolTestView');
+    const panel = descendants(view, node => node.id === 'tt-diagnostics')[0];
+    const panelText = descendants(view, node => node.id === 'tt-diagnostics-text')[0];
+    const run = descendants(view, node => node.tag === 'button' && node.textContent === 'Run tool')[0];
+    const url = descendants(view, node => node.id === 'tt-url')[0];
+    assert.ok(panel && panelText && run && url, 'manual test renders the result and diagnostics controls');
+    assert.equal(panel.hidden, true, 'no empty diagnostics box before a run');
+    url.value = 'https://example.com/';
+
+    sandbox.apiFetch = async () => ({
+        ok: true,
+        json: async () => ({
+            tool: 'web_fetch',
+            preview: 'Web fetch returned no page text.',
+            raw: JSON.stringify({ stdout: '', stderr: 'fetch failed: connection reset', exit_code: 1 }),
+        }),
+    });
+    await run._listeners.click[0]();
+    assert.equal(panel.hidden, false, 'failed fetch reveals diagnostics');
+    assert.equal(panelText.textContent, 'fetch failed: connection reset\nexit code: 1');
+
+    let release;
+    sandbox.apiFetch = () => new Promise(resolve => { release = resolve; });
+    const pending = run._listeners.click[0]();
+    assert.equal(panel.hidden, true, 'starting the next fetch clears stale diagnostics immediately');
+    assert.equal(panelText.textContent, '');
+    release({
+        ok: true,
+        json: async () => ({
+            tool: 'web_fetch',
+            preview: 'Hello',
+            raw: JSON.stringify({ stdout: 'Hello', stderr: '', exit_code: 0 }),
+        }),
+    });
+    await pending;
+    assert.equal(panel.hidden, true, 'quiet successful fetch leaves diagnostics hidden');
+
+    sandbox.apiFetch = async () => ({ ok: false, statusText: 'Bad Request', json: async () => ({ tool: 'web_fetch', error: 'provide one HTTP(S) url' }) });
+    await run._listeners.click[0]();
+    assert.equal(panel.hidden, false, 'request-level errors use the same panel');
+    assert.equal(panelText.textContent, 'Error: provide one HTTP(S) url');
+
+    console.log('== tooltest.test.js ok');
+})().catch(error => { console.error(error); process.exitCode = 1; });

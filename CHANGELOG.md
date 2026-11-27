@@ -33,6 +33,12 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
 
 ### Fixed
 
+- Manual `web_fetch` tests in the **tools** tab now show browser stderr and
+  non-zero or missing exit status in a separate diagnostics panel below the
+  editable result. Quiet runs show no empty panel, and starting another test
+  clears stale diagnostics. A missing web-tool entrypoint is caught at startup
+  and reports the exact `uv sync` / Playwright setup commands.
+
 - Long command lines in `run_cmd` tool-call cards wrap inside the card
   again. The dual pretty/raw shell view is a pair of `pre` blocks, and
   the browser's own `white-space: pre` for `pre` outranks anything the

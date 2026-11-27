@@ -649,6 +649,11 @@ uv sync --project web_tool
 uv run --project web_tool playwright install chromium
 ```
 
+If the tools tab reports `Failed to spawn: web-tool`, the venv is missing
+the project entrypoint. Rerun `uv sync --project web_tool`, then restart the
+harness. The startup preflight names any missing required file and prints the
+setup commands in the fetch diagnostics.
+
 ## Web fetch safety
 
 Fetch targets are checked before execution: URLs with embedded
@@ -716,7 +721,10 @@ review dialog shows them on a stderr tab next to Action and Thinking. That
 tab is diagnostic and is not submitted. The same split is in the finished
 session and in history: a web_fetch window opens on the captured page text,
 or on the submitted result, and offers a stderr tab when that fetch recorded
-any.
+any. In the **tools** tab's manual test, browser stderr and a non-zero or
+missing exit code appear in a separate diagnostics panel below the editable
+result; the panel stays absent on quiet runs and clears when the next test
+starts.
 Edit or annotate the extracted text, or leave it unchanged, then choose
 **Approve & submit content**. Only submitted content reaches the model. The
 script annotates an anchor that has visible text as `† example site·( https://example.com/page )`. A space separates the opening dagger from the link text, and the middle dot sits at the end of that text, against the opening parenthesis. A space sits on each side of the resolved URL, and the space plus closing parenthesis ends the link. An anchor with no visible text omits the middle dot: `†( https://example.com/page )`.
