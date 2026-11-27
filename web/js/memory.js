@@ -251,37 +251,32 @@ function renderMemory(body) {
     notes.appendChild(warmBody);
 
     const cold = document.createElement('h4');
-    cold.textContent = 'Cold notes';
+    cold.textContent = 'Cold';
     notes.appendChild(cold);
-    const table = document.createElement('table');
-    table.className = 'memory-notes';
-    const thead = document.createElement('tr');
-    ['Title', 'Tags', 'Note'].forEach(label => {
-        const th = document.createElement('th');
-        th.textContent = label;
-        thead.appendChild(th);
-    });
-    table.appendChild(thead);
+    const coldNotes = document.createElement('div');
+    coldNotes.className = 'memory-cold-notes';
     const rows = selected.notes || [];
     if (!rows.length) {
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.colSpan = 3;
-        td.textContent = '(none)';
-        tr.appendChild(td);
-        table.appendChild(tr);
+        const empty = document.createElement('p');
+        empty.className = 'docs-copy';
+        empty.textContent = '(none)';
+        coldNotes.appendChild(empty);
     }
     for (let i = 0; i < rows.length; i++) {
         const note = rows[i];
-        const tr = document.createElement('tr');
-        [note.key, note.tags, note.body].forEach(value => {
-            const td = document.createElement('td');
-            td.textContent = value || '';
-            tr.appendChild(td);
+        const card = document.createElement('dl');
+        card.className = 'memory-cold-note';
+        [['Title', note.key], ['Tags', note.tags], ['Note', note.body]].forEach(([label, value]) => {
+            const term = document.createElement('dt');
+            term.textContent = label;
+            const detail = document.createElement('dd');
+            detail.textContent = value || '';
+            card.appendChild(term);
+            card.appendChild(detail);
         });
-        table.appendChild(tr);
+        coldNotes.appendChild(card);
     }
-    notes.appendChild(table);
+    notes.appendChild(coldNotes);
     view.appendChild(notes);
 }
 

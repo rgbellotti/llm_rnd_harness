@@ -1047,6 +1047,8 @@
         .memory-project { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; margin: 0.45rem 0; }
         .memory-project .metrics { flex-basis: 100%; }
         .memory-block { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--h-inset, #0a1a28); border: 1px solid var(--h-border, #334455); border-radius: 4px; padding: 0.5rem; max-height: 16rem; overflow: auto; }
-        .memory-notes { width: 100%; border-collapse: collapse; }
-        .memory-notes th, .memory-notes td { border-bottom: 1px solid var(--h-border, #334455); text-align: left; vertical-align: top; padding: 0.35rem 0.5rem; font-size: 0.85rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .memory-cold-notes { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; min-width: 0; }
+        .memory-cold-note { display: flex; flex-direction: column; align-items: stretch; gap: 0.4rem; width: 100%; min-width: 0; box-sizing: border-box; margin: 0; padding: 0.5rem; background: var(--h-inset, #0a1a28); border: 1px solid var(--h-border, #334455); border-radius: 4px; }
+        .memory-cold-note dt { color: var(--h-muted, #8899aa); font-size: 0.8rem; }
+        .memory-cold-note dd { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; margin: 0; font-size: 0.85rem; white-space: pre-wrap; overflow-wrap: anywhere; }
         .memory-picker select { margin-left: 0.35rem; }
