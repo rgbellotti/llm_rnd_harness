@@ -41,6 +41,13 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
 
 ### Fixed
 
+- Pressing Shift during Vim Visual mode no longer cancels the selection,
+  so shifted `$` and `G` motions extend it to the line or text end.
+
+- Upward Vim Visual selections now keep the active caret on the moving
+  cursor, so the textarea keeps scrolling instead of pinning the bottom
+  edge of the selection.
+
 - Condensing a long history card from the link at its bottom now brings
   the shortened card back into view when it would otherwise be off-screen.
   The condense link near the card's head keeps the current viewing position.

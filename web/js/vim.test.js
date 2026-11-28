@@ -400,6 +400,26 @@ function leaveInsert() {
     press(backward, 'l');
     assert.equal(backward.selectionStart, 2);
     assert.equal(backward.selectionEnd, 4);
+    assert.equal(backward.selectionDirection, 'backward');
+    press(backward, 'Escape');
+    const shifted = box('hello world\nnext', 0);
+    press(shifted, 'v');
+    const shift = press(shifted, 'Shift');
+    assert.equal(shift.defaultPrevented, false);
+    assert.equal(badge.textContent, 'vim visual');
+    press(shifted, '$', { shiftKey: true });
+    assert.equal(shifted.selectionStart, 0);
+    assert.equal(shifted.selectionEnd, 11);
+    assert.equal(badge.textContent, 'vim visual');
+    press(shifted, 'Escape');
+    const shiftedEnd = box('one\ntwo\nthree', 0);
+    press(shiftedEnd, 'v');
+    press(shiftedEnd, 'Shift');
+    press(shiftedEnd, 'G', { shiftKey: true });
+    assert.equal(shiftedEnd.selectionStart, 0);
+    assert.equal(shiftedEnd.selectionEnd, shiftedEnd.value.length);
+    assert.equal(badge.textContent, 'vim visual');
+    press(shiftedEnd, 'Escape');
     const native = box('hello', 0);
     press(native, 'v');
     listener('input').fn({ target: native });
@@ -540,6 +560,41 @@ function leaveInsert() {
     const plain = box('ab\ncd', 0);
     press(plain, 'j');
     assert.equal(caret(plain), 3);
+    delete sandbox.window;
+}
+
+// Upward Visual motion keeps the active end on vimHead. Otherwise native
+// textarea scrolling follows the stationary lower anchor and stops at the
+// selection's bottom edge instead of following the cursor upward.
+{
+    const lines = [];
+    for (let i = 0; i < 40; i++) lines.push('line ' + i + ' of the continued prompt');
+    const text = lines.join('\n');
+    const el = box(text, text.indexOf('line 20'));
+    el.scrollTop = 240;
+    el.clientHeight = 160;
+    el.scrollHeight = 800;
+    sandbox.window = {
+        getComputedStyle() {
+            return {
+                lineHeight: '20px', fontSize: '14px',
+                paddingTop: '0px', paddingRight: '0px', paddingBottom: '0px', paddingLeft: '0px',
+                whiteSpace: 'pre-wrap'
+            };
+        }
+    };
+    evaluate('vimPreferredCol = null');
+    press(el, 'v');
+    for (let i = 0; i < 10; i++) press(el, 'k');
+    assert.equal(el.selectionStart, text.indexOf('line 10'));
+    assert.equal(el.selectionEnd, text.indexOf('line 20'));
+    assert.equal(el.selectionDirection, 'backward');
+    assert.equal(el.scrollTop, 200, 'upward Visual motion scrolls with vimHead');
+    for (let i = 0; i < 10; i++) press(el, 'j');
+    assert.equal(el.selectionStart, text.indexOf('line 20'));
+    assert.equal(el.selectionEnd, text.indexOf('line 20'));
+    assert.equal(el.selectionDirection, 'forward');
+    assert.ok(el.scrollTop > 200, 'downward Visual motion still reveals the cursor');
     delete sandbox.window;
 }
 

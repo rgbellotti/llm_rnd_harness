@@ -222,7 +222,7 @@ function vimLineNo(index, pos) {
     return lo;
 }
 
-function vimPlace(el, start, end) {
+function vimPlace(el, start, end, direction) {
     const n = (el.value || '').length;
     if (start < 0) start = 0;
     if (end < 0) end = 0;
@@ -242,6 +242,11 @@ function vimPlace(el, start, end) {
     } catch (e) {
         el.selectionStart = start;
         el.selectionEnd = end;
+    }
+    // Native textarea scrolling follows the active selection end. In an
+    // upward Visual selection that must be vimHead, not the lower anchor.
+    if (direction) {
+        try { el.selectionDirection = direction; } catch (e) {}
     }
     vimReveal(el);
 }
@@ -552,9 +557,9 @@ function vimGo(el, pos, keepCol) {
             let start = Math.min(a.start, b.start);
             let end = Math.max(a.end, b.end);
             if (end < value.length) end += 1;
-            vimPlace(el, start, end);
+            vimPlace(el, start, end, vimHead < vimAnchor ? 'backward' : 'forward');
         } else {
-            vimPlace(el, Math.min(vimAnchor, vimHead), Math.max(vimAnchor, vimHead));
+            vimPlace(el, Math.min(vimAnchor, vimHead), Math.max(vimAnchor, vimHead), vimHead < vimAnchor ? 'backward' : 'forward');
         }
     } else {
         vimPlace(el, pos, pos);
@@ -2062,6 +2067,9 @@ function vimOnKeyDown(e) {
     vimBox = el;
     vimFocused = true;
     const key = vimNormalizeKey(e.key || '');
+    // Shift is a modifier, not a motion. Exiting Visual here would collapse
+    // the selection before shifted motions such as $ and G arrive.
+    if (key === 'Shift') return;
     if (e.ctrlKey || e.metaKey || e.altKey) {
         if (vimTryCtrl(el, e, key)) return;
         if (vimMode === 'insert') vimClearJj();
