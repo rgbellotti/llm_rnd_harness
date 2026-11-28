@@ -1505,7 +1505,13 @@ function buildPromptSection(s) {
         setPromptCondensed(false);
     };
     condenseLink.onclick = () => setPromptCondensed(true);
-    toggle.onclick = () => setPromptCondensed(!promptCondensed());
+    toggle.onclick = () => {
+        const condensing = !promptCondensed();
+        setPromptCondensed(condensing);
+        if (condensing && s.historyView && typeof revealHistoryCard === 'function') {
+            revealHistoryCard(sec, s);
+        }
+    };
     body.appendChild(expandHit);
     head.appendChild(condenseLink);
     sec.appendChild(toggle);

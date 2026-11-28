@@ -41,6 +41,10 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
 
 ### Fixed
 
+- Condensing a long history card from the link at its bottom now brings
+  the shortened card back into view when it would otherwise be off-screen.
+  The condense link near the card's head keeps the current viewing position.
+
 - History session links open transcripts again in browsers, where the
   tab shell reuses an `HTMLCollection` rather than a test array. The HID
   input starts blank and the history content sits closer to the dashboard.

@@ -27,7 +27,13 @@ const fakeDocument = {
     createElement: tag => new Element(tag),
     body: new Element('body'),
 };
-const sandbox = { document: fakeDocument, copyText: () => {}, apiFetch: async () => ({ ok: true, json: async () => ({}) }) };
+const revealed = [];
+const sandbox = {
+    document: fakeDocument,
+    copyText: () => {},
+    apiFetch: async () => ({ ok: true, json: async () => ({}) }),
+    revealHistoryCard: card => revealed.push(card),
+};
 const ctx = vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(__dirname + '/tabs.js', 'utf8'), ctx);
 
@@ -47,7 +53,7 @@ vm.runInContext(fs.readFileSync(__dirname + '/tabs.js', 'utf8'), ctx);
     // Long prompt: the same tinted window as a history round.
     const lines = [];
     for (let i = 0; i < 20; i++) lines.push('assembled context line ' + i);
-    const s = { prompt: lines.join('\n'), nodes: { container: new Element('div'), rounds: new Map() } };
+    const s = { prompt: lines.join('\n'), historyView: true, nodes: { container: new Element('div'), rounds: new Map() } };
     sandbox.src = s;
     vm.runInContext('archivePrompt(src)', ctx);
     const sec = s.nodes.container.children[0];
@@ -74,5 +80,10 @@ vm.runInContext(fs.readFileSync(__dirname + '/tabs.js', 'utf8'), ctx);
     assert.equal(body.classList.contains('round-condensed'), true, 'click to condense re-condenses');
     assert.equal(tg.style.display, 'none');
     assert.match(bottom.textContent, /click to expand/);
+    assert.equal(revealed.length, 0, 'the head condense link keeps the viewing position');
+    hit.onclick();
+    bottom.onclick();
+    assert.equal(body.classList.contains('round-condensed'), true);
+    assert.deepEqual(revealed, [sec], 'the bottom history condense link reveals the card');
     console.log('Archived prompt condense/expand tests passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -43,6 +43,54 @@ assert.equal(round.condensed, true);
 assert.equal(round.body.style.display, 'none');
 assert.equal(round.condenseLink.style.display, 'none');
 
+// A bottom-link condense reveals a shortened history card only when the
+// collapse leaves it outside the usable viewport. The head link never does.
+const scrollCalls = [];
+sandbox.window.innerHeight = 800;
+sandbox.window.scrollY = 5000;
+sandbox.window.scrollBy = (x, dy) => {
+    scrollCalls.push(dy);
+    sandbox.window.scrollY += dy;
+};
+sandbox.document.body.scrollHeight = 10000;
+sandbox.document.getElementById = id => id === 'controlDashboard'
+    ? { getBoundingClientRect: () => ({ bottom: 180 }) }
+    : null;
+const history = {
+    id: 'hist-reveal',
+    historyView: true,
+    data: { rounds: { 1: { model: '' } }, order: [1] },
+    nodes: { container: element(), rounds: new Map() },
+};
+const historyRound = sandbox.ensureRound(history, 1, 'test-model');
+historyRound.totalLines = 100;
+let cardRect = { top: -500, bottom: -200, left: 0, right: 400, width: 400, height: 300 };
+historyRound.sec.getBoundingClientRect = () => cardRect;
+historyRound.toggle.onclick();
+assert.equal(historyRound.condensed, true);
+assert.deepEqual(scrollCalls, [-680], 'bottom condense brings the off-screen card below the dashboard');
+
+scrollCalls.length = 0;
+cardRect = { top: -500, bottom: -200, left: 0, right: 400, width: 400, height: 300 };
+sandbox.setRoundCondensed(historyRound, false);
+historyRound.condensed = false;
+historyRound.condenseLink.onclick();
+assert.equal(historyRound.condensed, true);
+assert.deepEqual(scrollCalls, [], 'head condense keeps the current viewing position');
+
+scrollCalls.length = 0;
+cardRect = { top: 200, bottom: 500, left: 0, right: 400, width: 400, height: 300 };
+sandbox.setRoundCondensed(historyRound, false);
+historyRound.condensed = false;
+historyRound.toggle.onclick();
+assert.deepEqual(scrollCalls, [], 'a still-visible condensed card does not move the viewport');
+
+scrollCalls.length = 0;
+cardRect = { top: -500, bottom: -200, left: 0, right: 400, width: 400, height: 300 };
+historyRound.toggle.onclick();
+assert.equal(historyRound.condensed, false);
+assert.deepEqual(scrollCalls, [], 'expanding from the bottom keeps the existing behavior');
+
 // Rendering defaults and Text/Rendered controls are identical for all callers.
 const renderedSession = { id: 'rendered', nodes: { container: element(), rounds: new Map() },
     data: { rounds: {}, order: [] } };

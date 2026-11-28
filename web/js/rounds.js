@@ -107,7 +107,9 @@ function ensureRound(s, n, model) {
     toggle.textContent = 'click to expand';
     // History replays are removed from the live-session registry after
     // rendering, but their DOM and controls remain mounted in the history tab.
-    toggle.onclick = () => toggleRound(s, n);
+    // Only this bottom link reveals the card after a condense; the head link
+    // keeps the reader's current viewing position.
+    toggle.onclick = () => toggleRound(s, n, true);
     sec.appendChild(toggle);
     const attach = typeof roundShouldAttach !== 'function' || roundShouldAttach(s, n);
     if (attach) {
@@ -198,6 +200,32 @@ function showHeadCondense(r, on) {
     if (!r || !r.condenseLink) return;
     r.condenseLink.style.display = on ? '' : 'none';
 }
+// Collapsing from the link below a long history card can leave the shortened
+// card entirely above the viewport. Move back to it only when no usable part
+// remains on screen, and keep the card clear of the sticky dashboard.
+function revealHistoryCard(card, s) {
+    if (!card || typeof card.getBoundingClientRect !== 'function' || typeof window === 'undefined') return;
+    const viewH = window.innerHeight || 0;
+    if (!(viewH > 0)) return;
+    const rect = card.getBoundingClientRect();
+    const viewTop = scrollViewportTop();
+    if (rect.bottom > viewTop && rect.top < viewH) return;
+    if (typeof scrollBlockBelowDashboard === 'function') {
+        scrollBlockBelowDashboard(card);
+    } else if (typeof window.scrollBy === 'function') {
+        try { window.scrollBy(0, rect.top - viewTop); }
+        catch (e) {
+            if (typeof card.scrollIntoView === 'function') {
+                try { card.scrollIntoView({ block: 'start', inline: 'nearest' }); }
+                catch (err) { try { card.scrollIntoView(true); } catch (err2) {} }
+            }
+        }
+    } else if (typeof card.scrollIntoView === 'function') {
+        try { card.scrollIntoView({ block: 'start', inline: 'nearest' }); }
+        catch (e) { try { card.scrollIntoView(true); } catch (err) {} }
+    }
+    if (s && s.scroll && typeof holdScroll === 'function') holdScroll(s);
+}
 function appendRoundToolTip(parent, s, label, lines) {
     const span = document.createElement('span');
     span.className = 'round-tool-count has-tasks';
@@ -251,10 +279,11 @@ function paintRoundToolSummary(s, n, show) {
         appendRoundToolTip(r.toolSummary, s, 'meta', metaLines.length ? metaLines : ['No metadata recorded.']);
     }
 }
-function toggleRound(s, n) {
+function toggleRound(s, n, revealAfterCondense) {
     const r = s.nodes.rounds.get(n);
     if (!r) return;
     if (s.historyView) {
+        const condensing = !r.condensed;
         if (r.condensed) {
             setRoundCondensed(r, false);
             r.body.style.display = '';
@@ -273,7 +302,9 @@ function toggleRound(s, n) {
             showHeadCondense(r, false);
         }
         refreshScrollJumps(r.body);
+        if (condensing && typeof settleHistoryWindow === 'function') settleHistoryWindow(s);
         maybeScroll();
+        if (condensing && revealAfterCondense) revealHistoryCard(r.sec, s);
         return;
     }
     if (r.condensed) {
