@@ -727,6 +727,7 @@
         .menu-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin: 0.5rem 0; }
         .menu-row button { font-size: 0.78rem; padding: 0.3rem 0.7rem; margin: 0; }
         .menu-hint { font-size: 0.76rem; color: var(--h-menu-label, #77879a); }
+        .effort-note { color: var(--h-menu-label, #77879a); font-size: 0.76rem; }
         .menu label { display: flex; gap: 0.4rem; align-items: center; cursor: pointer; }
         /* The extra 1.4em on top is one line. The vim mode label sits
            inside the top of the box; this padding keeps the first line

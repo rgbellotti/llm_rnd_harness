@@ -112,7 +112,7 @@ async function refreshConfig() {
         if (!res.ok) throw new Error(await res.text() || ('HTTP ' + res.status));
         cachedConfig = await res.json();
         if (typeof applyHistoryGate === 'function') applyHistoryGate(cachedConfig);
-        if (typeof applyGrokControls === 'function') applyGrokControls();
+        if (typeof applyReasoningControls === 'function') applyReasoningControls();
         if (typeof restoreStoredRole === 'function') await restoreStoredRole();
         if (typeof restoreStoredDefaultModel === 'function') await restoreStoredDefaultModel();
         return true;

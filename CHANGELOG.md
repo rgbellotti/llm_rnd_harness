@@ -25,6 +25,12 @@ project's versioning is `MAJOR.MINOR` while pre-1.0.
 
 ### Changed
 
+- The dashboard's **session options** submenu now keeps only its controls;
+  provider-key, reasoning-effort, and export explanatory hints were removed.
+  The reasoning selector follows the selected provider: enabled and named
+  for Grok or Beam, or disabled with a model-default note for Ollama and
+  OpenCode. OpenCode also points to its direct reasoning controls.
+
 - History scroll-arrow proximity areas are now full-width click bands.
   The arrow appears anywhere within the top or bottom band, and clicking
   anywhere in the band jumps to that edge of the text.

@@ -83,18 +83,16 @@
             <button id="continueTabBtn" type="button" title="Keeps every existing tab and opens the assembled context in a new one">Continue in new tab</button>
         </div>
         <div class="menu-row">
-            <label for="effortSelect">Grok reasoning effort</label>
-            <select id="effortSelect" title="How long Grok thinks before each reply, including before a tool call. low is a short trace. high is the API default and a longer visible trace. xhigh is the longest. grok-4.5 treats xhigh as high. Models reached through Ollama ignore this. Applies to the next run. A Grok approval can change it for the rest of that run.">
+            <label id="effortLabel" for="effortSelect">Reasoning effort</label>
+            <select id="effortSelect" aria-describedby="effortNote" title="Reasoning level for the next run. Approvals can change it for later rounds in the same run.">
                 <option value="low">low</option>
                 <option value="medium">medium</option>
                 <option value="high" selected>high</option>
                 <option value="xhigh">xhigh</option>
             </select>
-            <span id="grokKeyNote" class="menu-hint"></span>
+            <span id="effortNote" class="effort-note"></span>
             <span id="effortError" class="model-menu-error" style="display:none"></span>
         </div>
-        <div class="menu-hint">Grok reasoning effort applies to the next Grok run. Ollama ignores it. Every level still shows a reasoning trace before a tool call. The level changes how long that trace is, how long the round waits, and how many reasoning tokens are billed on top of the visible reply. On a Grok run, the approval dialog can set a different level for the next round, and that choice stays selected on later calls in the same run.</div>
-        <div class="menu-hint">JSON is the small archive (prompt + thinking + responses + metrics — tool outputs excluded). HTML is the full-fidelity archive (everything, viewable offline). Curate appends that text into the prompt, with a context label on each block.</div>
     </details>
     <div id="bottom_row_buttons" class="row-between">
     <div id="bottom_row_left" class="row-start">

@@ -76,6 +76,17 @@ vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(__dirname + '/modelmenu.js', 'utf8'), sandbox);
 const evaluate = code => vm.runInContext(code, sandbox);
 
+const page = fs.readFileSync(__dirname + '/../index.html', 'utf8');
+const sessionOptions = page.match(/<details class="menu">([\s\S]*?)<\/details>/);
+assert.ok(sessionOptions, 'the dashboard has a session options submenu');
+assert.doesNotMatch(sessionOptions[1], /id="grokKeyNote"/, 'provider-key copy is not shown');
+assert.doesNotMatch(sessionOptions[1], /class="menu-hint"/, 'explanatory paragraphs are not shown');
+assert.match(sessionOptions[1], /id="effortLabel"/, 'the reasoning label remains');
+assert.match(sessionOptions[1], /id="effortSelect"/, 'the reasoning selector remains');
+assert.match(sessionOptions[1], /id="effortNote"/, 'unsupported providers have a status note');
+const css = fs.readFileSync(__dirname + '/../style.css', 'utf8');
+assert.match(css, /\.effort-note\s*\{[^}]*color:\s*var\(--h-menu-label/, 'the provider note is muted');
+
 (async () => {
     // Groups render; the current model carries the active mark.
     const options = sandbox.document.getElementById('modelMenu').querySelectorAll('.model-option');
@@ -88,6 +99,10 @@ const evaluate = code => vm.runInContext(code, sandbox);
     // Escape closes the menu; clicking the toggle reopens it.
     toggle.click();
     assert.equal(menu.hidden, false);
+    evaluate('cachedConfig = { reasoning_effort: "xhigh", grok_key: true }; applyReasoningControls()');
+    assert.equal(sandbox.document.getElementById('effortSelect').value, 'xhigh');
+    assert.equal(sandbox.document.getElementById('effortSelect').disabled, true);
+    assert.equal(sandbox.document.getElementById('effortNote').textContent, 'currently unsupported (model default used).');
     documentListeners.keydown({ key: 'Escape' });
     assert.equal(menu.hidden, true);
     // While a run is in flight every option is disabled.
@@ -123,7 +138,9 @@ const evaluate = code => vm.runInContext(code, sandbox);
         menu.setAttribute('data-groups', JSON.stringify([
             { group: 'OLLAMA', models: ['beam:cloud'] },
             { group: 'LOCAL', models: [] },
-            { group: 'GROK', models: ['grok-4.7'] }
+            { group: 'GROK', models: ['grok-4.7'] },
+            { group: 'REFLECTION', models: ['Beam-1.0-501B-A23B'] },
+            { group: 'OPENCODE', models: ['opencode/grok-4.7'] }
         ]));
         buildModelMenu();
     `);
@@ -131,8 +148,42 @@ const evaluate = code => vm.runInContext(code, sandbox);
     assert.ok(hints.some(hint => hint.textContent === 'No local chat models listed.'));
     assert.equal(
         sandbox.document.getElementById('modelMenu').querySelectorAll('.model-option').length,
-        2
+        4
     );
+    const effort = sandbox.document.getElementById('effortSelect');
+    const effortLabel = sandbox.document.getElementById('effortLabel');
+    const effortNote = sandbox.document.getElementById('effortNote');
+    toggle.textContent = 'beam:cloud';
+    evaluate('syncModelMenu()');
+    assert.equal(effort.disabled, true);
+    assert.equal(effortLabel.textContent, 'Reasoning effort');
+    assert.equal(effortNote.textContent, 'currently unsupported (model default used).');
+    toggle.textContent = 'grok-4.7';
+    evaluate('syncModelMenu()');
+    assert.equal(effort.disabled, false);
+    assert.equal(effortLabel.textContent, 'Grok reasoning effort');
+    assert.equal(effortNote.textContent, '');
+    toggle.textContent = 'Beam-1.0-501B-A23B';
+    evaluate('syncModelMenu()');
+    assert.equal(effort.disabled, false);
+    assert.equal(effortLabel.textContent, 'Beam reasoning effort');
+    assert.equal(effortNote.textContent, '');
+    toggle.textContent = 'opencode/grok-4.7';
+    evaluate('syncModelMenu()');
+    assert.equal(effort.disabled, true);
+    assert.equal(effortLabel.textContent, 'Reasoning effort');
+    assert.equal(
+        effortNote.textContent,
+        'currently unsupported (model default used). Reasoning adjustment available directly in OpenCode.'
+    );
+    let unsupportedEffortRequests = 0;
+    sandbox.fetch = async () => { unsupportedEffortRequests += 1; };
+    await evaluate('switchEffort("high")');
+    assert.equal(unsupportedEffortRequests, 0, 'disabled providers do not post effort changes');
+    sandbox.fetch = async () => ({ ok: true, status: 200, json: async () => ({ model: 'grok-4.7' }) });
+    await evaluate('switchModel("grok-4.7")');
+    assert.equal(effort.disabled, false, 'a model switch updates the control immediately');
+    assert.equal(effortLabel.textContent, 'Grok reasoning effort');
     // "Make Default" appears only when the current model differs from the
     // saved default, and posts /default-model.
     evaluate('cachedConfig = { default_model: "beam:cloud" }');

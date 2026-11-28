@@ -29,6 +29,7 @@ function buildModelMenu() {
             btn.className = 'model-option';
             btn.setAttribute('role', 'menuitemradio');
             btn.dataset.model = name;
+            btn.dataset.provider = group.group;
             const mark = document.createElement('span');
             mark.className = 'model-mark';
             mark.textContent = '✓';
@@ -72,6 +73,7 @@ function syncModelMenu() {
         btn.querySelector('.model-mark').textContent = active ? '✓' : ' ';
     }
     syncDefaultLink();
+    applyReasoningControls();
 }
 function openModelMenu(open) {
     const menu = document.getElementById('modelMenu');
@@ -235,20 +237,59 @@ function syncDefaultLink() {
         effort.addEventListener('change', () => switchEffort(effort.value));
     }
 })();
-function applyGrokControls() {
-    const effort = document.getElementById('effortSelect');
-    if (effort && typeof cachedConfig !== 'undefined' && cachedConfig && cachedConfig.reasoning_effort
-        && effort.value !== cachedConfig.reasoning_effort) {
-        effort.value = cachedConfig.reasoning_effort;
+function modelProviderGroup(model) {
+    const name = String(model || '').trim();
+    if (/^opencode\//i.test(name)) return 'OPENCODE';
+    if (/^grok(?:-|$)/i.test(name)) return 'GROK';
+    if (/^beam(?:-|$)/i.test(name)) return 'REFLECTION';
+    return 'OLLAMA';
+}
+function selectedProviderGroup() {
+    const toggle = document.getElementById('modelToggle');
+    const menu = document.getElementById('modelMenu');
+    const current = toggle ? String(toggle.textContent || '').trim() : '';
+    if (menu && typeof menu.querySelectorAll === 'function') {
+        for (const option of menu.querySelectorAll('.model-option')) {
+            if (option.dataset && option.dataset.model === current && option.dataset.provider) {
+                return option.dataset.provider;
+            }
+        }
     }
-    const note = document.getElementById('grokKeyNote');
-    if (note && typeof cachedConfig !== 'undefined' && cachedConfig) {
-        note.textContent = cachedConfig.grok_key
-            ? 'API key is loaded. A Grok model sends the prompt and tool outputs to api.x.ai.'
-            : 'XAI_API_KEY is not set. Grok models refuse to run until harness-keys provides it, or you export it and restart the harness.';
+    return modelProviderGroup(current);
+}
+function reasoningEffortSupported(provider) {
+    return provider === 'GROK' || provider === 'REFLECTION';
+}
+function applyReasoningControls() {
+    const effort = document.getElementById('effortSelect');
+    const label = document.getElementById('effortLabel');
+    const note = document.getElementById('effortNote');
+    const provider = selectedProviderGroup();
+    const supported = reasoningEffortSupported(provider);
+    if (label) {
+        label.textContent = provider === 'GROK'
+            ? 'Grok reasoning effort'
+            : provider === 'REFLECTION' ? 'Beam reasoning effort' : 'Reasoning effort';
+    }
+    if (note) {
+        note.textContent = supported
+            ? ''
+            : 'currently unsupported (model default used).'
+                + (provider === 'OPENCODE' ? ' Reasoning adjustment available directly in OpenCode.' : '');
+    }
+    if (effort) {
+        effort.disabled = !supported;
+        effort.title = supported
+            ? 'Reasoning level for the next run. Approvals can change it for later rounds in the same run.'
+            : (note ? note.textContent : 'Reasoning adjustment is unsupported; the model default is used.');
+        if (typeof cachedConfig !== 'undefined' && cachedConfig && cachedConfig.reasoning_effort
+            && effort.value !== cachedConfig.reasoning_effort) {
+            effort.value = cachedConfig.reasoning_effort;
+        }
     }
 }
 async function switchEffort(effort) {
+    if (!reasoningEffortSupported(selectedProviderGroup())) return;
     const err = document.getElementById('effortError');
     if (err) { err.textContent = ''; err.style.display = 'none'; }
     if (typeof runningSid !== 'undefined' && runningSid !== null) {
@@ -268,7 +309,7 @@ async function switchEffort(effort) {
         if (!res.ok) throw new Error(await res.text() || ('HTTP ' + res.status));
         const body = await res.json();
         if (typeof cachedConfig !== 'undefined' && cachedConfig) cachedConfig.reasoning_effort = body.effort;
-        if (typeof setStatus === 'function') setStatus('Grok reasoning effort set to ' + body.effort);
+        if (typeof setStatus === 'function') setStatus('Reasoning effort set to ' + body.effort);
         if (typeof refreshConfig === 'function') refreshConfig();
     } catch (e) {
         if (err) { err.textContent = 'Effort change failed: ' + e.message; err.style.display = ''; }
